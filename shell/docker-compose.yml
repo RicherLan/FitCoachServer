@@ -1,0 +1,33 @@
+# FitCoach Server 开发环境 Docker Compose
+# 使用方式：cd shell && docker-compose up -d
+
+version: '3.8'
+
+services:
+  mysql:
+    image: mysql:8.0
+    container_name: fitcoach-mysql
+    restart: unless-stopped
+    ports:
+      - "3306:3306"
+    environment:
+      MYSQL_ROOT_PASSWORD: root123
+      MYSQL_DATABASE: fitcoach
+      MYSQL_USER: fitcoach
+      MYSQL_PASSWORD: fitcoach123
+      TZ: Asia/Shanghai
+    volumes:
+      - fitcoach-mysql-data:/var/lib/mysql
+    command:
+      - --character-set-server=utf8mb4
+      - --collation-server=utf8mb4_unicode_ci
+      - --default-authentication-plugin=mysql_native_password
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-u", "root", "-proot123"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+volumes:
+  fitcoach-mysql-data:
+    driver: local
