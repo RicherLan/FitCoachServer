@@ -37,7 +37,16 @@ public enum ResultCode {
     OTP_SEND_LIMIT_EXCEEDED(4003, "今日验证码发送次数已达上限"),
     OTP_INVALID(4004, "验证码错误或已过期"),
     OTP_VERIFY_LIMIT_EXCEEDED(4005, "验证码错误次数过多，请重新获取"),
-    SMS_PROVIDER_ERROR(4006, "短信服务暂不可用，请稍后重试");
+    SMS_PROVIDER_ERROR(4006, "短信服务暂不可用，请稍后重试"),
+
+    // ====== 用户资料 / 文件上传 5xxx ======
+    NICKNAME_INVALID(5001, "昵称长度需在 2-20 之间，且不能仅含空白字符"),
+    GENDER_INVALID(5002, "性别取值不合法（0=未知, 1=男, 2=女）"),
+    PROFILE_NO_CHANGES(5003, "未提供任何要更新的字段"),
+    AVATAR_FILE_EMPTY(5101, "头像文件为空"),
+    AVATAR_FILE_TOO_LARGE(5102, "头像文件过大，请重新选择"),
+    AVATAR_CONTENT_TYPE_INVALID(5103, "仅支持 jpg / png / webp 格式的头像"),
+    AVATAR_STORAGE_ERROR(5104, "头像保存失败，请稍后重试");
 
     private final int code;
     private final String message;

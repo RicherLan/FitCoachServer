@@ -9,6 +9,7 @@ import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
+import org.springframework.web.multipart.MaxUploadSizeExceededException;
 
 /**
  * 全局异常处理器
@@ -53,6 +54,18 @@ public class GlobalExceptionHandler {
                 .orElse("参数绑定失败");
         log.warn("参数绑定失败: {}", message);
         return Result.error(ResultCode.BAD_REQUEST, message);
+    }
+
+    /**
+     * Multipart 文件超出 spring.servlet.multipart.max-file-size — 比业务校验更早触发。
+     * <p>客户端通常已本地压缩，触发到这里说明压缩失败 / 恶意请求；
+     * 用 5102 错误码与 AVATAR_FILE_TOO_LARGE 对齐，前端可统一展示。
+     */
+    @ExceptionHandler(MaxUploadSizeExceededException.class)
+    @ResponseStatus(HttpStatus.OK)
+    public Result<?> handleMaxUploadSize(MaxUploadSizeExceededException e) {
+        log.warn("上传文件超过 multipart 限制: {}", e.getMessage());
+        return Result.error(ResultCode.AVATAR_FILE_TOO_LARGE);
     }
 
     /**

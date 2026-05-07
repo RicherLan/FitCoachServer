@@ -24,6 +24,25 @@ spring:
     time-zone: Asia/Shanghai
     default-property-inclusion: non_null
 
+  # Multipart 上传 — 客户端会本地压缩到 ~200KB 内，服务端再校验大小。
+  servlet:
+    multipart:
+      enabled: true
+      max-file-size: 5MB
+      max-request-size: 5MB
+
+# ====== 文件上传 ======
+# 头像等用户上传文件存盘根目录；可通过环境变量覆盖到挂载盘 / OSS 同步目录。
+# url-prefix 是返回给客户端的可访问 URL 前缀（含协议+域名/IP+/static），
+# 后期切 OSS 时只需把 url-prefix 改成 OSS Bucket 域名即可，业务代码不变。
+upload:
+  base-dir: ${UPLOAD_BASE_DIR:./uploads}
+  url-prefix: ${UPLOAD_URL_PREFIX:http://localhost:8080/static}
+  avatar:
+    sub-dir: avatar
+    max-size-bytes: 2097152                           # 2MB（客户端压缩后留 buffer）
+    allowed-content-types: image/jpeg,image/png,image/webp
+
 # ====== 短信服务 ======
 # provider 取值：
 #   mock    → 不真发，OTP 打日志（开发期默认）
