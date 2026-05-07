@@ -29,7 +29,15 @@ public enum ResultCode {
 
     // ====== 用户相关 3xxx ======
     USER_NOT_FOUND(3001, "用户不存在"),
-    USER_DISABLED(3002, "账号已被禁用");
+    USER_DISABLED(3002, "账号已被禁用"),
+
+    // ====== 手机号 / SMS 4xxx ======
+    PHONE_INVALID(4001, "手机号格式不正确"),
+    OTP_SEND_TOO_FAST(4002, "验证码发送过于频繁，请稍后再试"),
+    OTP_SEND_LIMIT_EXCEEDED(4003, "今日验证码发送次数已达上限"),
+    OTP_INVALID(4004, "验证码错误或已过期"),
+    OTP_VERIFY_LIMIT_EXCEEDED(4005, "验证码错误次数过多，请重新获取"),
+    SMS_PROVIDER_ERROR(4006, "短信服务暂不可用，请稍后重试");
 
     private final int code;
     private final String message;

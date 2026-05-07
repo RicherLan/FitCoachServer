@@ -17,7 +17,9 @@ import java.time.LocalDateTime;
 @Entity
 @Table(name = "user", indexes = {
         @Index(name = "uk_open_id", columnList = "open_id", unique = true),
-        @Index(name = "uk_union_id", columnList = "union_id", unique = true)
+        @Index(name = "uk_union_id", columnList = "union_id", unique = true),
+        // phone 允许 NULL；MySQL 上 unique 索引允许多个 NULL，因此微信登录用户的 phone=null 不会冲突
+        @Index(name = "uk_phone", columnList = "phone", unique = true)
 })
 public class User extends BaseEntity {
 
@@ -40,7 +42,8 @@ public class User extends BaseEntity {
     private String avatarUrl;
 
     /**
-     * 登录方式：WECHAT / PHONE / EMAIL / GUEST
+     * 登录方式：WECHAT / PHONE / EMAIL / GUEST / GOOGLE / APPLE
+     * <p>注意：表示"账号注册时的首选登录方式"，用户后续可能绑定多种登录方式。
      */
     @Column(name = "login_type", nullable = false, length = 20)
     @Enumerated(EnumType.STRING)
@@ -67,7 +70,8 @@ public class User extends BaseEntity {
     private Integer gender = 0;
 
     /**
-     * 手机号（预留）
+     * 手机号（unique，用于手机号验证码登录）。
+     * <p>NULL 允许并存，因此微信用户未绑定手机号时也能正常存。
      */
     @Column(name = "phone", length = 20)
     private String phone;
@@ -92,11 +96,15 @@ public class User extends BaseEntity {
 
     /**
      * 登录方式枚举
+     * <p>新增登录方式时只需在此处加值 + 实现对应 Service/Controller，
+     * 数据库列已通过 {@code @Enumerated(EnumType.STRING)} 兼容新值。
      */
     public enum LoginType {
         WECHAT,
         PHONE,
         EMAIL,
-        GUEST
+        GUEST,
+        GOOGLE,
+        APPLE
     }
 }

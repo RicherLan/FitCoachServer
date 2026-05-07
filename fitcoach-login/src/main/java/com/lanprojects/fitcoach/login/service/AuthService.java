@@ -75,6 +75,26 @@ public class AuthService {
     }
 
     /**
+     * 手机号验证码登录
+     * <p>
+     * 流程：
+     * <ol>
+     *   <li>客户端先调 /api/auth/phone/sendCode 发码（OtpService 已写入缓存）；</li>
+     *   <li>客户端再调 /api/auth/phone/login 把 phone + code 传过来；</li>
+     *   <li>这里只负责 findOrCreate + 颁 token；OTP 校验由 Controller 层先做。</li>
+     * </ol>
+     *
+     * <p>注意：OTP 校验前置由 Controller 调 OtpService.verifyOtp，校验通过才会进入本方法。
+     * 这样防止"未校验就建账号"的逻辑漏洞。
+     */
+    @Transactional
+    public LoginResponse phoneLogin(String phone) {
+        User user = findOrCreateByPhone(phone);
+        log.info("手机号登录成功, uid={}, phone={}", user.getUid(), LogUtils.mask(phone));
+        return buildLoginResponse(user);
+    }
+
+    /**
      * 通过 access token 获取当前用户信息
      */
     public LoginResponse getCurrentUser(String accessToken) {
@@ -191,6 +211,37 @@ public class AuthService {
             // 并发：另一个请求刚好把同 openId / unionId 的用户先建了；回退用 openId 重新查
             log.warn("并发创建用户冲突，回退按 openId 查询, openId={}", LogUtils.mask(tokenResp.getOpenId()));
             return userRepository.findByOpenId(tokenResp.getOpenId())
+                    .orElseThrow(() -> new BusinessException(ResultCode.ERROR, "用户创建失败，请重试"));
+        }
+    }
+
+    /**
+     * 按手机号查找或创建用户。
+     * <p>并发安全：先查 → 不存在则插入；唯一索引冲突时回退按 phone 再查（同 wechat 路径）。
+     */
+    private User findOrCreateByPhone(String phone) {
+        Optional<User> existing = userRepository.findByPhone(phone);
+        if (existing.isPresent()) {
+            User user = existing.get();
+            log.info("手机号老用户登录, uid={}, phone={}", user.getUid(), LogUtils.mask(phone));
+            user.setLastLoginAt(LocalDateTime.now());
+            return userRepository.save(user);
+        }
+
+        log.info("手机号新用户注册, phone={}", LogUtils.mask(phone));
+        User newUser = new User();
+        newUser.setUid(UUID.randomUUID().toString().replace("-", ""));
+        // 默认昵称用手机号末 4 位脱敏，避免直接暴露用户标识
+        newUser.setNickname("用户" + phone.substring(7));
+        newUser.setLoginType(User.LoginType.PHONE);
+        newUser.setPhone(phone);
+        newUser.setGender(0);
+        newUser.setLastLoginAt(LocalDateTime.now());
+        try {
+            return userRepository.save(newUser);
+        } catch (DataIntegrityViolationException e) {
+            log.warn("并发创建手机号用户冲突，回退按 phone 查询, phone={}", LogUtils.mask(phone));
+            return userRepository.findByPhone(phone)
                     .orElseThrow(() -> new BusinessException(ResultCode.ERROR, "用户创建失败，请重试"));
         }
     }

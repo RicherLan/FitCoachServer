@@ -4,9 +4,13 @@ import com.lanprojects.fitcoach.common.exception.BusinessException;
 import com.lanprojects.fitcoach.common.model.Result;
 import com.lanprojects.fitcoach.common.model.ResultCode;
 import com.lanprojects.fitcoach.login.dto.LoginResponse;
+import com.lanprojects.fitcoach.login.dto.PhoneLoginRequest;
 import com.lanprojects.fitcoach.login.dto.RefreshTokenRequest;
+import com.lanprojects.fitcoach.login.dto.SendCodeRequest;
 import com.lanprojects.fitcoach.login.dto.WeChatLoginRequest;
 import com.lanprojects.fitcoach.login.service.AuthService;
+import com.lanprojects.fitcoach.login.service.OtpService;
+import jakarta.servlet.http.HttpServletRequest;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -26,6 +30,7 @@ public class AuthController {
     private static final String BEARER_PREFIX = "Bearer ";
 
     private final AuthService authService;
+    private final OtpService otpService;
 
     /**
      * 微信登录
@@ -35,6 +40,34 @@ public class AuthController {
     @PostMapping("/wechat/login")
     public Result<LoginResponse> wechatLogin(@Valid @RequestBody WeChatLoginRequest request) {
         return Result.success(authService.wechatLogin(request.getCode()));
+    }
+
+    /**
+     * 发送手机号验证码
+     * <p>POST /api/auth/phone/sendCode
+     * <br>Body: { "phone": "13812345678", "scene": "LOGIN" }
+     * <p>OtpService 内部已做：60s 重发冷却 / 1h 单号上限 / IP 限频 / OTP 失败次数。
+     */
+    @PostMapping("/phone/sendCode")
+    public Result<Void> sendPhoneCode(
+            @Valid @RequestBody SendCodeRequest request,
+            HttpServletRequest httpRequest) {
+        otpService.requestOtp(request.getPhone(), getClientIp(httpRequest));
+        return Result.success();
+    }
+
+    /**
+     * 手机号 + 验证码登录
+     * <p>POST /api/auth/phone/login
+     * <br>Body: { "phone": "13812345678", "code": "123456" }
+     * <p>新手机号自动注册账号，无需额外注册流程。
+     */
+    @PostMapping("/phone/login")
+    public Result<LoginResponse> phoneLogin(@Valid @RequestBody PhoneLoginRequest request) {
+        // 1) 先校验 OTP，校验失败直接抛业务码（OTP 内部限流也会触发对应错误）
+        otpService.verifyOtp(request.getPhone(), request.getCode());
+        // 2) 校验通过 → 进入 findOrCreate + 颁 token
+        return Result.success(authService.phoneLogin(request.getPhone()));
     }
 
     /**
@@ -105,5 +138,23 @@ public class AuthController {
             throw new BusinessException(ResultCode.UNAUTHORIZED, "Authorization 中的 token 为空");
         }
         return token;
+    }
+
+    /**
+     * 取真实客户端 IP —— 优先取反向代理头，避免拿到所有请求都是 LB 的内网 IP。
+     * <p>注意：生产环境必须确保上游是可信代理（如 Nginx），否则 X-Forwarded-For 可被伪造。
+     */
+    private String getClientIp(HttpServletRequest request) {
+        String ip = request.getHeader("X-Forwarded-For");
+        if (ip != null && !ip.isBlank()) {
+            // X-Forwarded-For 可能含多个 IP，第一个是客户端真实 IP
+            int comma = ip.indexOf(',');
+            return (comma > 0 ? ip.substring(0, comma) : ip).trim();
+        }
+        ip = request.getHeader("X-Real-IP");
+        if (ip != null && !ip.isBlank()) {
+            return ip.trim();
+        }
+        return request.getRemoteAddr();
     }
 }

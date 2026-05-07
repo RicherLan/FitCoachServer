@@ -40,5 +40,18 @@
             <groupId>cn.hutool</groupId>
             <artifactId>hutool-http</artifactId>
         </dependency>
+
+        <!-- 本地缓存（OTP 存储 / 频率限制；多实例部署时可后续切 Redis） -->
+        <dependency>
+            <groupId>com.github.ben-manes.caffeine</groupId>
+            <artifactId>caffeine</artifactId>
+        </dependency>
+
+        <!-- 腾讯云 SDK 完整包；MockSmsService 不依赖此包的实际类型，
+             纯 mock 部署时仅是磁盘多了几 MB 类，spring 不加载 TencentSmsService bean。 -->
+        <dependency>
+            <groupId>com.tencentcloudapi</groupId>
+            <artifactId>tencentcloud-sdk-java</artifactId>
+        </dependency>
     </dependencies>
 </project>

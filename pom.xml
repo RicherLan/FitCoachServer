@@ -29,6 +29,8 @@
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
         <jjwt.version>0.12.5</jjwt.version>
         <hutool.version>5.8.26</hutool.version>
+        <caffeine.version>3.1.8</caffeine.version>
+        <tencentcloud.version>3.1.1064</tencentcloud.version>
     </properties>
 
     <dependencyManagement>
@@ -69,6 +71,22 @@
                 <groupId>cn.hutool</groupId>
                 <artifactId>hutool-http</artifactId>
                 <version>${hutool.version}</version>
+            </dependency>
+
+            <!-- Caffeine 本地缓存（用于 OTP 存储 / 频率限制；后续切 Redis 不影响业务代码） -->
+            <dependency>
+                <groupId>com.github.ben-manes.caffeine</groupId>
+                <artifactId>caffeine</artifactId>
+                <version>${caffeine.version}</version>
+            </dependency>
+
+            <!-- 腾讯云 SDK 完整包（默认不启用，sms.provider=tencent 时才走此实现）。
+                 用全集而非分包：分包名/版本会随版本漂移；全集稳定且 maven central 一定能拉到。
+                 体积约 50MB，但 spring-boot-maven-plugin 默认不会打入未引用类。 -->
+            <dependency>
+                <groupId>com.tencentcloudapi</groupId>
+                <artifactId>tencentcloud-sdk-java</artifactId>
+                <version>${tencentcloud.version}</version>
             </dependency>
         </dependencies>
     </dependencyManagement>

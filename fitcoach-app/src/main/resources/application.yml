@@ -24,6 +24,29 @@ spring:
     time-zone: Asia/Shanghai
     default-property-inclusion: non_null
 
+# ====== 短信服务 ======
+# provider 取值：
+#   mock    → 不真发，OTP 打日志（开发期默认）
+#   tencent → 调腾讯云 SMS（生产）
+sms:
+  provider: ${SMS_PROVIDER:mock}
+  tencent:
+    secret-id:   ${TENCENT_SECRET_ID:}
+    secret-key:  ${TENCENT_SECRET_KEY:}
+    sdk-app-id:  ${TENCENT_SMS_APP_ID:}
+    template-id: ${TENCENT_SMS_TEMPLATE_ID:}
+    sign-name:   ${TENCENT_SMS_SIGN_NAME:FitCoach}
+    region:      ${TENCENT_SMS_REGION:ap-guangzhou}
+
+# ====== OTP 验证码策略 ======
+otp:
+  length: 6
+  ttl-seconds: 300                   # OTP 有效期 5 分钟
+  resend-cooldown-seconds: 60        # 同一手机号重发冷却
+  max-per-hour-per-phone: 5          # 同一手机号 1 小时最多发 5 条
+  max-per-hour-per-ip: 20            # 同一 IP 1 小时最多发 20 条
+  max-verify-attempts: 5             # 单条 OTP 最多校验 5 次错误后立即作废
+
 # 日志
 logging:
   level:
