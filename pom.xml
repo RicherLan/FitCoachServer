@@ -22,6 +22,7 @@
         <module>fitcoach-common</module>
         <module>fitcoach-login</module>
         <module>fitcoach-feedback</module>
+        <module>fitcoach-admin</module>
         <module>fitcoach-app</module>
     </modules>
 
@@ -50,6 +51,11 @@
             <dependency>
                 <groupId>com.lanprojects</groupId>
                 <artifactId>fitcoach-feedback</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>com.lanprojects</groupId>
+                <artifactId>fitcoach-admin</artifactId>
                 <version>${project.version}</version>
             </dependency>
 

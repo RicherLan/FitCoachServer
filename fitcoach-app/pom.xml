@@ -28,6 +28,10 @@
             <groupId>com.lanprojects</groupId>
             <artifactId>fitcoach-feedback</artifactId>
         </dependency>
+        <dependency>
+            <groupId>com.lanprojects</groupId>
+            <artifactId>fitcoach-admin</artifactId>
+        </dependency>
 
         <!-- MySQL -->
         <dependency>

@@ -6,6 +6,7 @@ import com.lanprojects.fitcoach.common.upload.UploadProperties;
 import com.lanprojects.fitcoach.feedback.dto.CreateFeedbackRequest;
 import com.lanprojects.fitcoach.feedback.dto.FeedbackResponse;
 import com.lanprojects.fitcoach.feedback.dto.UploadAttachmentResponse;
+import com.lanprojects.fitcoach.feedback.entity.FeedbackStatus;
 import com.lanprojects.fitcoach.feedback.entity.UserFeedback;
 import com.lanprojects.fitcoach.feedback.repository.UserFeedbackRepository;
 import lombok.RequiredArgsConstructor;
@@ -113,6 +114,8 @@ public class FeedbackService {
         entity.setAttachmentUrls(attachmentUrls);
         entity.setAppVersion(request.getAppVersion());
         entity.setPlatform(request.getPlatform());
+        // 后台处理状态默认 PENDING，admin 模块后续可改为 PROCESSING / RESOLVED / IGNORED
+        entity.setStatus(FeedbackStatus.PENDING);
         UserFeedback saved = feedbackRepository.save(entity);
         log.info("反馈创建成功, uid={}, id={}, type={}, attachments={}",
                 uid, saved.getId(), saved.getType(), attachmentUrls.size());

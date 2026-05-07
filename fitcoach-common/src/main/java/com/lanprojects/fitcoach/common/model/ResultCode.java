@@ -58,7 +58,20 @@ public enum ResultCode {
     FEEDBACK_ATTACHMENT_FILE_EMPTY(6101, "附件文件为空"),
     FEEDBACK_ATTACHMENT_FILE_TOO_LARGE(6102, "附件文件过大，请重新选择"),
     FEEDBACK_ATTACHMENT_CONTENT_TYPE_INVALID(6103, "附件仅支持 jpg / png / webp 格式"),
-    FEEDBACK_ATTACHMENT_STORAGE_ERROR(6104, "附件保存失败，请稍后重试");
+    FEEDBACK_ATTACHMENT_STORAGE_ERROR(6104, "附件保存失败，请稍后重试"),
+
+    // ====== 后台管理 7xxx（fitcoach-admin 模块） ======
+    ADMIN_UNAUTHORIZED(7001, "管理员未登录或登录已过期"),
+    ADMIN_TOKEN_INVALID(7002, "无效的管理员凭证"),
+    ADMIN_LOGIN_FAILED(7003, "账号或密码错误"),
+    ADMIN_ACCOUNT_DISABLED(7004, "管理员账号已被禁用"),
+    ADMIN_ACCOUNT_NOT_FOUND(7005, "管理员账号不存在"),
+    ADMIN_PASSWORD_INVALID(7006, "密码长度需在 6-32 之间"),
+    ADMIN_OLD_PASSWORD_WRONG(7007, "原密码不正确"),
+    ADMIN_PERMISSION_DENIED(7008, "权限不足"),
+    ADMIN_FEEDBACK_NOT_FOUND(7101, "反馈记录不存在"),
+    ADMIN_FEEDBACK_STATUS_INVALID(7102, "反馈状态值不合法"),
+    ADMIN_USER_TARGET_NOT_FOUND(7201, "目标用户不存在");
 
     private final int code;
     private final String message;

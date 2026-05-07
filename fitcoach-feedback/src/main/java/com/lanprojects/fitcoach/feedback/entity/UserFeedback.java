@@ -6,6 +6,7 @@ import lombok.Getter;
 import lombok.NoArgsConstructor;
 import lombok.Setter;
 
+import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;
 
@@ -18,7 +19,10 @@ import java.util.List;
  *       业务上反馈不强依赖用户存在（即使用户被注销，反馈也应保留供运营查阅）；</li>
  *   <li>type 用 {@code @Enumerated(EnumType.STRING)} — 数据库可读、扩展枚举值无需迁移；</li>
  *   <li>attachment_urls 走 {@link JsonStringListConverter} — 单条最多 5 个 URL，TEXT 列够用；</li>
- *   <li>uid 加索引 — 后续做"我的反馈"查询能走 index。</li>
+ *   <li>uid / created_at / status 加索引 — 后续做"我的反馈" / 后台分页 / 状态筛选都能走 index。</li>
+ *   <li>处理相关字段（status / handlerAdminId / handlerReply / handledAt）由 fitcoach-admin
+ *       后台管理模块更新，客户端不感知；status 的默认值 PENDING 由 service 层在创建时显式赋值，
+ *       同时为兼容存量行 / DDL 自动加列场景，字段上加 {@link Column#nullable()}=true。</li>
  * </ul>
  */
 @Getter
@@ -27,7 +31,8 @@ import java.util.List;
 @Entity
 @Table(name = "user_feedback", indexes = {
         @Index(name = "idx_uid", columnList = "uid"),
-        @Index(name = "idx_created_at", columnList = "created_at")
+        @Index(name = "idx_created_at", columnList = "created_at"),
+        @Index(name = "idx_status", columnList = "status")
 })
 public class UserFeedback extends BaseEntity {
 
@@ -60,4 +65,27 @@ public class UserFeedback extends BaseEntity {
     /** 客户端平台（android / ios），可选 */
     @Column(name = "platform", length = 16)
     private String platform;
+
+    // ====== 后台处理相关字段（fitcoach-admin 模块写入） ======
+
+    /**
+     * 处理状态（默认 PENDING）。
+     * <p>nullable=true 是为了兼容 ddl-auto=update 加列时存量行 NULL；service 读取时统一兜底为 PENDING。
+     */
+    @Column(name = "status", length = 32)
+    @Enumerated(EnumType.STRING)
+    private FeedbackStatus status;
+
+    /** 处理人（管理员账号 username 或 id），由 admin 模块在状态流转时写入 */
+    @Column(name = "handler_admin", length = 64)
+    private String handlerAdmin;
+
+    /** 处理回复（管理员填写，可选；客户端"我的反馈"展示用） */
+    @Lob
+    @Column(name = "handler_reply", columnDefinition = "TEXT")
+    private String handlerReply;
+
+    /** 最近一次状态流转时间（每次 status 变更时更新） */
+    @Column(name = "handled_at")
+    private LocalDateTime handledAt;
 }

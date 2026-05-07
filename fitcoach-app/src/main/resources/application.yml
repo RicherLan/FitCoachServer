@@ -78,6 +78,12 @@ otp:
   max-per-hour-per-ip: 20            # 同一 IP 1 小时最多发 20 条
   max-verify-attempts: 5             # 单条 OTP 最多校验 5 次错误后立即作废
 
+# ====== 后台管理（fitcoach-admin） ======
+# 管理员 token 过期时间默认 8h（比客户端 access token 2h 更长 —— 后台操作场景一次登录工作半天）。
+# 该配置存放在 sys_config.admin.token_expire_hours，本文件不直接配置；
+# 默认账号（首次启动自动创建）：username=admin / password=admin123，
+# 生产环境请立即登录后台修改密码！
+
 # 日志
 logging:
   level:
