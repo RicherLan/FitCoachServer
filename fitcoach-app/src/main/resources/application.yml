@@ -24,12 +24,15 @@ spring:
     time-zone: Asia/Shanghai
     default-property-inclusion: non_null
 
-  # Multipart 上传 — 客户端会本地压缩到 ~200KB 内，服务端再校验大小。
+  # Multipart 上传
+  # - 反馈附件 / 头像走小图：客户端压到 ~1MB；
+  # - 日志 zip：单包最大 50MB（log-pull.max-upload-size-bytes 兜底校验）。
+  # 这里取所有上传场景的最大值 60MB，给 multipart 边界字段留点 buffer。
   servlet:
     multipart:
       enabled: true
-      max-file-size: 5MB
-      max-request-size: 5MB
+      max-file-size: 60MB
+      max-request-size: 60MB
 
 # ====== 文件上传 ======
 # 头像等用户上传文件存盘根目录；可通过环境变量覆盖到挂载盘 / OSS 同步目录。
@@ -54,6 +57,19 @@ upload:
     max-attachment-count: 5                           # 单条反馈最多 5 张
     max-content-length: 1000                          # 正文最长 1000 字
     allowed-content-types: image/jpeg,image/png,image/webp
+
+# ====== 客户端日志拉取（fitcoach-log） ======
+# admin 后台触发 → 客户端 120s 轮询 pending → 打包 zip 上传 → admin 下载排查
+# 三类调度任务（UPLOADING 超时回滚 / PENDING 24h 标 EXPIRED / UPLOADED 7 天清盘）共用一个间隔
+log-pull:
+  sub-dir: logs                                       # 日志 zip 在 upload.base-dir 下的子目录
+  max-upload-size-bytes: 52428800                     # 50MB / 包，超过直接拒
+  pending-expire-hours: 24                            # PENDING 任务硬过期时长
+  uploading-timeout-minutes: 5                        # UPLOADING 超时回滚阈值
+  uploaded-retention-days: 7                          # UPLOADED 文件保留天数
+  max-retry-count: 3                                  # 单任务重试上限（含首次）
+  scheduler-interval-seconds: 60                      # 调度器扫描间隔
+  max-active-task-per-uid-in-24h: 1                   # 同 uid 24h 内并发任务上限（admin 创建去重）
 
 # ====== 短信服务 ======
 # provider 取值：

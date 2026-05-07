@@ -71,7 +71,25 @@ public enum ResultCode {
     ADMIN_PERMISSION_DENIED(7008, "权限不足"),
     ADMIN_FEEDBACK_NOT_FOUND(7101, "反馈记录不存在"),
     ADMIN_FEEDBACK_STATUS_INVALID(7102, "反馈状态值不合法"),
-    ADMIN_USER_TARGET_NOT_FOUND(7201, "目标用户不存在");
+    ADMIN_USER_TARGET_NOT_FOUND(7201, "目标用户不存在"),
+
+    // ====== 日志拉取 7301-7399（fitcoach-log 模块） ======
+    LOG_TASK_NOT_FOUND(7301, "日志任务不存在"),
+    LOG_TASK_STATUS_INVALID(7302, "日志任务状态值不合法"),
+    LOG_TASK_TARGET_USER_NOT_FOUND(7303, "目标用户不存在"),
+    LOG_TASK_DUPLICATE_PENDING(7304, "该用户在 24h 内已存在未完成的日志任务，请勿重复创建"),
+    LOG_TASK_NOT_DOWNLOADABLE(7305, "日志任务尚未上传完成，无法下载"),
+    LOG_TASK_FILE_MISSING(7306, "日志文件已被清理或不存在"),
+    LOG_TASK_RETRY_LIMIT_EXCEEDED(7307, "日志任务上传重试次数已达上限"),
+    LOG_TASK_REASSIGN_DENIED(7308, "日志任务已被其他设备/进程领取，请稍后重试"),
+    LOG_UPLOAD_FILE_EMPTY(7311, "上传的日志文件为空"),
+    LOG_UPLOAD_FILE_TOO_LARGE(7312, "上传的日志文件过大"),
+    LOG_UPLOAD_CONTENT_TYPE_INVALID(7313, "日志文件仅支持 application/zip"),
+    LOG_UPLOAD_TASK_OWNER_MISMATCH(7314, "日志任务归属用户不匹配，已拒绝上传"),
+    LOG_UPLOAD_TASK_STATUS_NOT_UPLOADING(7315, "日志任务当前状态不允许上传"),
+    LOG_UPLOAD_STORAGE_ERROR(7316, "日志文件保存失败，请稍后重试"),
+    LOG_TASK_EXPIRED(7321, "日志任务已过期"),
+    LOG_DOWNLOAD_IO_ERROR(7322, "日志文件读取失败");
 
     private final int code;
     private final String message;

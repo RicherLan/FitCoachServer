@@ -30,6 +30,10 @@
         </dependency>
         <dependency>
             <groupId>com.lanprojects</groupId>
+            <artifactId>fitcoach-log</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>com.lanprojects</groupId>
             <artifactId>fitcoach-admin</artifactId>
         </dependency>
 
