@@ -33,6 +33,10 @@ replay_pid*
 *.log
 logs/
 
+# === Shell 脚本运行时（PID 文件等） ===
+shell/run/
+*.pid
+
 # === Environment ===
 .env
 *.env.local
