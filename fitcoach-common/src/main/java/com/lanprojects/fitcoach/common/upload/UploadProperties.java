@@ -28,6 +28,15 @@ public class UploadProperties {
     /** 静态资源 URL 前缀（如 {@code http://host:8080/static}），返回给客户端拼成完整 URL */
     private String urlPrefix = "http://localhost:8080/static";
 
+    /**
+     * 新用户注册时分配的默认头像 URL（手机号 / 微信昵称头像缺失时兜底）。
+     * <p>客户端的 normalizeAvatarUrl 已能处理 / 开头的相对路径，所以默认走相对路径，
+     * 跨网络环境（模拟器 / 真机）一份配置都通用。后期若切 OSS / CDN，
+     * 改成完整 https URL 即可，业务代码不动。
+     * <p>留空时表示不下发默认头像（avatarUrl 入库 NULL，由客户端兜底渲染占位）。
+     */
+    private String defaultAvatarUrl = "/assets/default-avatar.svg";
+
     /** 头像专用配置 */
     private Avatar avatar = new Avatar();
 

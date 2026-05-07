@@ -3,6 +3,7 @@ package com.lanprojects.fitcoach.login.service;
 import com.lanprojects.fitcoach.common.config.service.SysConfigService;
 import com.lanprojects.fitcoach.common.exception.BusinessException;
 import com.lanprojects.fitcoach.common.model.ResultCode;
+import com.lanprojects.fitcoach.common.upload.UploadProperties;
 import com.lanprojects.fitcoach.common.util.LogUtils;
 import com.lanprojects.fitcoach.login.dto.LoginResponse;
 import com.lanprojects.fitcoach.login.dto.WeChatTokenResponse;
@@ -52,6 +53,7 @@ public class AuthService {
     private final WeChatService weChatService;
     private final UserRepository userRepository;
     private final SysConfigService sysConfigService;
+    private final UploadProperties uploadProperties;
 
     /**
      * 微信登录
@@ -187,7 +189,14 @@ public class AuthService {
             User user = existing.get();
             log.info("微信老用户登录, uid={}, openId={}", user.getUid(), LogUtils.mask(tokenResp.getOpenId()));
             user.setNickname(weChatUser.getNickname());
-            user.setAvatarUrl(weChatUser.getHeadImgUrl());
+            // 微信端若本次返回空头像（用户调隐私设置）→ 保留原头像，避免把用户已设置的头像清掉
+            String wxAvatar = weChatUser.getHeadImgUrl();
+            if (wxAvatar != null && !wxAvatar.isBlank()) {
+                user.setAvatarUrl(wxAvatar);
+            } else if (user.getAvatarUrl() == null || user.getAvatarUrl().isBlank()) {
+                // 极端情况：本地无头像 + 微信也没给 → 兜底默认头像
+                user.setAvatarUrl(resolveAvatarUrl(null));
+            }
             user.setGender(weChatUser.getSex());
             user.setUnionId(tokenResp.getUnionId());
             user.setLastLoginAt(LocalDateTime.now());
@@ -199,7 +208,8 @@ public class AuthService {
         User newUser = new User();
         newUser.setUid(UUID.randomUUID().toString().replace("-", ""));
         newUser.setNickname(weChatUser.getNickname());
-        newUser.setAvatarUrl(weChatUser.getHeadImgUrl());
+        // 微信端可能返回空头像（比如用户隐私设置），缺失时用 server 配置的默认头像兜底
+        newUser.setAvatarUrl(resolveAvatarUrl(weChatUser.getHeadImgUrl()));
         newUser.setLoginType(User.LoginType.WECHAT);
         newUser.setOpenId(tokenResp.getOpenId());
         newUser.setUnionId(tokenResp.getUnionId());
@@ -233,6 +243,8 @@ public class AuthService {
         newUser.setUid(UUID.randomUUID().toString().replace("-", ""));
         // 默认昵称用手机号末 4 位脱敏，避免直接暴露用户标识
         newUser.setNickname("用户" + phone.substring(7));
+        // 手机号注册无第三方头像源 → 直接用 server 配置的默认头像
+        newUser.setAvatarUrl(resolveAvatarUrl(null));
         newUser.setLoginType(User.LoginType.PHONE);
         newUser.setPhone(phone);
         newUser.setGender(0);
@@ -249,5 +261,19 @@ public class AuthService {
     private Long toMillis(LocalDateTime time) {
         if (time == null) return null;
         return time.atZone(ZoneId.systemDefault()).toInstant().toEpochMilli();
+    }
+
+    /**
+     * 选择头像 URL：优先用第三方平台返回的，没有就走 server 配置的默认头像。
+     * <p>defaultAvatarUrl 配置为空 / 留空时返回 null（数据库存 NULL，由客户端兜底渲染占位）。
+     * @param sourceUrl 第三方头像 URL（如微信 headImgUrl），可能为 null / 空串
+     * @return 实际写库的 avatarUrl
+     */
+    private String resolveAvatarUrl(String sourceUrl) {
+        if (sourceUrl != null && !sourceUrl.isBlank()) {
+            return sourceUrl;
+        }
+        String fallback = uploadProperties.getDefaultAvatarUrl();
+        return (fallback != null && !fallback.isBlank()) ? fallback : null;
     }
 }

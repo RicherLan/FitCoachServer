@@ -33,11 +33,17 @@ spring:
 
 # ====== 文件上传 ======
 # 头像等用户上传文件存盘根目录；可通过环境变量覆盖到挂载盘 / OSS 同步目录。
-# url-prefix 是返回给客户端的可访问 URL 前缀（含协议+域名/IP+/static），
-# 后期切 OSS 时只需把 url-prefix 改成 OSS Bucket 域名即可，业务代码不变。
+# url-prefix 是返回给客户端的可访问 URL 前缀。
+# 默认用相对路径 /static，让客户端按自己的 baseURL 拼接成完整 URL，
+# 这样不会受"模拟器访问宿主机得用 10.0.2.2 而不是 localhost"这类网络拓扑差异影响。
+# 后期切 OSS 时把 UPLOAD_URL_PREFIX 设为 https://cdn.example.com 即可，业务代码不变。
 upload:
   base-dir: ${UPLOAD_BASE_DIR:./uploads}
-  url-prefix: ${UPLOAD_URL_PREFIX:http://localhost:8080/static}
+  url-prefix: ${UPLOAD_URL_PREFIX:/static}
+  # 默认头像 — 新用户（手机号 / 微信无头像）兜底使用。
+  # 走 /assets/** 走 classpath 资源映射，与 /static/** 上传目录隔离，
+  # 升级 / 替换默认头像只需重发包，不会覆盖用户已上传的头像。
+  default-avatar-url: ${UPLOAD_DEFAULT_AVATAR_URL:/assets/default-avatar.svg}
   avatar:
     sub-dir: avatar
     max-size-bytes: 2097152                           # 2MB（客户端压缩后留 buffer）

@@ -47,8 +47,14 @@ public class WebConfig implements WebMvcConfigurer {
     }
 
     /**
-     * 把上传目录映射成可被 HTTP 访问的静态资源。
-     * <p>必须以 {@code /} 结尾，否则 Spring 会把最后一段当成文件名。
+     * 静态资源映射：
+     * <ul>
+     *   <li>{@code /static/**} → 上传目录（用户上传的头像等动态文件）</li>
+     *   <li>{@code /assets/**} → classpath 下的 {@code static-assets/}（默认头像、占位图等随包内置资源）</li>
+     * </ul>
+     * 把"内置资源"和"用户上传"拆成两个 URL 前缀，互不干扰：
+     *   - 用户上传的头像永远不会覆盖内置默认头像
+     *   - 升级 / 修改默认头像只需要重新发包，不影响磁盘上的用户数据
      */
     @Override
     public void addResourceHandlers(ResourceHandlerRegistry registry) {
@@ -57,10 +63,15 @@ public class WebConfig implements WebMvcConfigurer {
         if (!dir.exists() && !dir.mkdirs()) {
             log.warn("无法创建上传目录: {}", dir.getAbsolutePath());
         }
-        String location = "file:" + dir.getAbsolutePath() + File.separator;
-        log.info("静态资源映射: /static/** -> {}", location);
+        String uploadLocation = "file:" + dir.getAbsolutePath() + File.separator;
+        log.info("静态资源映射: /static/** -> {}", uploadLocation);
         registry.addResourceHandler("/static/**")
-                .addResourceLocations(location);
+                .addResourceLocations(uploadLocation);
+
+        // 内置资源映射 — classpath:/static-assets/ 下的资源（如 default-avatar.svg）
+        log.info("静态资源映射: /assets/** -> classpath:/static-assets/");
+        registry.addResourceHandler("/assets/**")
+                .addResourceLocations("classpath:/static-assets/");
     }
 
     @PostConstruct

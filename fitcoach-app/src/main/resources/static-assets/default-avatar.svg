@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  默认头像 - 适用于新注册用户、社交平台头像缺失时的兜底。
+  设计：
+    - 圆形容器，珊瑚橘渐变（与 FitCoach 主色 #FF6B6B → #FF8E53 对齐）
+    - 白色简笔人物轮廓，跨平台兼容性好（不依赖外部字体）
+    - 240x240 viewBox，被 RN <SvgUri/> 渲染时按 size 等比缩放
+-->
+<svg xmlns="http://www.w3.org/2000/svg" width="240" height="240" viewBox="0 0 240 240">
+  <defs>
+    <linearGradient id="bg" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#FF6B6B"/>
+      <stop offset="100%" stop-color="#FF8E53"/>
+    </linearGradient>
+  </defs>
+  <!-- 圆形背景 -->
+  <circle cx="120" cy="120" r="120" fill="url(#bg)"/>
+  <!-- 头部 -->
+  <circle cx="120" cy="96" r="40" fill="#FFFFFF"/>
+  <!-- 肩部弧线（截断式半圆，模拟胸像） -->
+  <path d="M40 220 C 40 158, 200 158, 200 220 Z" fill="#FFFFFF"/>
+</svg>
