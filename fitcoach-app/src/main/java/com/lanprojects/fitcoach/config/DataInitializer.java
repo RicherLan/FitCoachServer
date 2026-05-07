@@ -2,18 +2,27 @@ package com.lanprojects.fitcoach.config;
 
 import com.lanprojects.fitcoach.common.config.entity.SysConfig;
 import com.lanprojects.fitcoach.common.config.repository.SysConfigRepository;
+import com.lanprojects.fitcoach.common.config.service.ConfigCryptoService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.boot.CommandLineRunner;
 import org.springframework.stereotype.Component;
 
-import java.util.List;
+import java.security.SecureRandom;
+import java.util.Base64;
 
 /**
  * 数据初始化器 — 应用首次启动时写入默认配置
  * <p>
  * 只在配置项不存在时插入，不会覆盖已有值。
  * 管理员后续通过后台管理平台修改这些配置。
+ * <p>
+ * <b>安全相关：</b>
+ * <ul>
+ *   <li>JWT 密钥不再硬编码，每个新部署的实例随机生成 48 字节并入库；</li>
+ *   <li>微信 AppSecret 标记为 encrypted=true，由 SysConfigService 自动加解密；</li>
+ *   <li>Access token 默认 2 小时；refresh token 默认 7 天。</li>
+ * </ul>
  */
 @Slf4j
 @Component
@@ -21,37 +30,63 @@ import java.util.List;
 public class DataInitializer implements CommandLineRunner {
 
     private final SysConfigRepository sysConfigRepository;
+    private final ConfigCryptoService configCryptoService;
+
+    private final SecureRandom secureRandom = new SecureRandom();
 
     @Override
     public void run(String... args) {
-        List<SysConfig> defaults = List.of(
-                // ====== 微信配置 ======
-                new SysConfig("wechat.app_id", "",
-                        "wechat", "微信开放平台 AppID"),
-                new SysConfig("wechat.app_secret", "",
-                        "wechat", "微信开放平台 AppSecret（敏感，勿泄露）"),
-
-                // ====== JWT 配置 ======
-                new SysConfig("jwt.secret", "FitCoach2026SecretKeyForJwtToken!!",
-                        "jwt", "JWT 签名密钥（至少 32 字符）"),
-                new SysConfig("jwt.expire_hours", "168",
-                        "jwt", "JWT 过期时间（小时），默认 7 天")
-        );
-
         int inserted = 0;
-        for (SysConfig config : defaults) {
-            if (sysConfigRepository.findByConfigKey(config.getConfigKey()).isEmpty()) {
-                sysConfigRepository.save(config);
-                inserted++;
-                log.info("初始化配置: {} = {}", config.getConfigKey(),
-                        config.getConfigKey().contains("secret") ? "***" : config.getConfigValue());
-            }
-        }
+        // ====== 微信配置（敏感字段加密存储） ======
+        inserted += ensureExists(new SysConfig(
+                "wechat.app_id", "", "wechat", "微信开放平台 AppID"));
+        // AppSecret：encrypted=true，初始空值（运维通过管理平台填入；写入时自动加密）
+        inserted += ensureExists(new SysConfig(
+                "wechat.app_secret", configCryptoService.encrypt(""),
+                "wechat", "微信开放平台 AppSecret（加密存储，勿直接修改 DB）", true));
+
+        // ====== JWT 配置 ======
+        // jwt.secret 不再硬编码：每实例首次启动随机生成 48 字节（base64 后 ~64 字符）
+        inserted += ensureExists(new SysConfig(
+                "jwt.secret", generateJwtSecret(),
+                "jwt", "JWT 签名密钥（首次启动自动生成，请妥善保管）"));
+        // 默认 access token 2h
+        inserted += ensureExists(new SysConfig(
+                "jwt.expire_hours", "2",
+                "jwt", "Access token 过期时间（小时），默认 2h"));
+        // 默认 refresh token 7d
+        inserted += ensureExists(new SysConfig(
+                "jwt.refresh_expire_hours", "168",
+                "jwt", "Refresh token 过期时间（小时），默认 7 天"));
 
         if (inserted > 0) {
             log.info("初始化完成，新增 {} 项配置", inserted);
         } else {
             log.info("配置已存在，跳过初始化");
         }
+    }
+
+    private int ensureExists(SysConfig config) {
+        if (sysConfigRepository.findByConfigKey(config.getConfigKey()).isEmpty()) {
+            sysConfigRepository.save(config);
+            log.info("初始化配置: {} = {}", config.getConfigKey(),
+                    isSensitive(config) ? "***" : config.getConfigValue());
+            return 1;
+        }
+        return 0;
+    }
+
+    private boolean isSensitive(SysConfig config) {
+        return Boolean.TRUE.equals(config.getEncrypted())
+                || config.getConfigKey().contains("secret");
+    }
+
+    /**
+     * 生成 48 字节随机 → base64 编码（约 64 字符），满足 HMAC-SHA256 32 字节最低长度要求且更安全。
+     */
+    private String generateJwtSecret() {
+        byte[] random = new byte[48];
+        secureRandom.nextBytes(random);
+        return Base64.getEncoder().encodeToString(random);
     }
 }

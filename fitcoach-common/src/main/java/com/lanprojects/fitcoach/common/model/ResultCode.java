@@ -19,6 +19,8 @@ public enum ResultCode {
     UNAUTHORIZED(1001, "未登录或登录已过期"),
     TOKEN_EXPIRED(1002, "登录已过期，请重新登录"),
     TOKEN_INVALID(1003, "无效的登录凭证"),
+    REFRESH_TOKEN_INVALID(1004, "刷新凭证无效或已过期，请重新登录"),
+    JWT_SECRET_MISSING(1005, "JWT 密钥未配置，请联系管理员"),
 
     // ====== 微信登录 2xxx ======
     WECHAT_CODE_INVALID(2001, "微信授权码无效"),

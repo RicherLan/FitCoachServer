@@ -5,6 +5,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.lanprojects.fitcoach.common.config.service.SysConfigService;
 import com.lanprojects.fitcoach.common.exception.BusinessException;
 import com.lanprojects.fitcoach.common.model.ResultCode;
+import com.lanprojects.fitcoach.common.util.LogUtils;
 import com.lanprojects.fitcoach.login.dto.WeChatTokenResponse;
 import com.lanprojects.fitcoach.login.dto.WeChatUserInfo;
 import lombok.RequiredArgsConstructor;
@@ -51,15 +52,14 @@ public class WeChatService {
         String appSecret = getAppSecret();
 
         String url = String.format(TOKEN_URL, appId, appSecret, code);
-        log.info("请求微信 access_token, appId={}", appId);
+        log.debug("请求微信 access_token, appId={}, codeMask={}", appId, LogUtils.mask(code));
 
         try {
             String response = HttpUtil.get(url, 5000);
-            log.debug("微信 access_token 响应: {}", response);
-
+            // 响应里包含 access_token / openid 等敏感信息，正常流程下不打印明文
             WeChatTokenResponse tokenResp = objectMapper.readValue(response, WeChatTokenResponse.class);
             if (!tokenResp.isSuccess()) {
-                log.error("微信 access_token 获取失败: errCode={}, errMsg={}", tokenResp.getErrCode(), tokenResp.getErrMsg());
+                log.warn("微信 access_token 获取失败: errCode={}, errMsg={}", tokenResp.getErrCode(), tokenResp.getErrMsg());
                 throw new BusinessException(ResultCode.WECHAT_CODE_INVALID,
                         "微信授权失败: " + tokenResp.getErrMsg());
             }
@@ -67,7 +67,8 @@ public class WeChatService {
         } catch (BusinessException e) {
             throw e;
         } catch (Exception e) {
-            log.error("调用微信 access_token 接口异常", e);
+            log.error("调用微信 access_token 接口异常: type={}, message={}",
+                    e.getClass().getSimpleName(), e.getMessage());
             throw new BusinessException(ResultCode.WECHAT_API_ERROR, "微信接口调用失败，请稍后重试");
         }
     }
@@ -81,15 +82,13 @@ public class WeChatService {
      */
     public WeChatUserInfo getUserInfo(String accessToken, String openId) {
         String url = String.format(USER_INFO_URL, accessToken, openId);
-        log.info("请求微信用户信息, openId={}", openId);
+        log.debug("请求微信用户信息, openId={}", LogUtils.mask(openId));
 
         try {
             String response = HttpUtil.get(url, 5000);
-            log.debug("微信用户信息响应: {}", response);
-
             WeChatUserInfo userInfo = objectMapper.readValue(response, WeChatUserInfo.class);
             if (!userInfo.isSuccess()) {
-                log.error("微信用户信息获取失败: errCode={}, errMsg={}", userInfo.getErrCode(), userInfo.getErrMsg());
+                log.warn("微信用户信息获取失败: errCode={}, errMsg={}", userInfo.getErrCode(), userInfo.getErrMsg());
                 throw new BusinessException(ResultCode.WECHAT_API_ERROR,
                         "获取微信用户信息失败: " + userInfo.getErrMsg());
             }
@@ -97,7 +96,8 @@ public class WeChatService {
         } catch (BusinessException e) {
             throw e;
         } catch (Exception e) {
-            log.error("调用微信用户信息接口异常", e);
+            log.error("调用微信用户信息接口异常: type={}, message={}",
+                    e.getClass().getSimpleName(), e.getMessage());
             throw new BusinessException(ResultCode.WECHAT_API_ERROR, "微信接口调用失败，请稍后重试");
         }
     }

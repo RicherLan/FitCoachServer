@@ -6,7 +6,11 @@ import lombok.Data;
 import lombok.NoArgsConstructor;
 
 /**
- * 登录成功响应 — 返回用户信息 + JWT token
+ * 登录成功响应 — 返回用户信息 + JWT token + refresh token
+ * <p>
+ * - 客户端持久化 token / refreshToken / 时间戳；
+ * - access token 短期有效（默认 2h），过期后用 refreshToken 调 /api/auth/refresh 换新；
+ * - /api/auth/me 接口只返回基础信息（不会再返回 token / refreshToken / expiresIn / refreshExpiresIn）。
  */
 @Data
 @Builder
@@ -40,12 +44,32 @@ public class LoginResponse {
     private String loginType;
 
     /**
-     * JWT access token
+     * JWT access token（短期）
      */
     private String token;
 
     /**
-     * token 过期时间（秒）
+     * access token 过期时间（秒）
      */
     private Long expiresIn;
+
+    /**
+     * refresh token（长期，用来换新的 access token）
+     */
+    private String refreshToken;
+
+    /**
+     * refresh token 过期时间（秒）
+     */
+    private Long refreshExpiresIn;
+
+    /**
+     * 账号创建时间（毫秒时间戳）
+     */
+    private Long createTime;
+
+    /**
+     * 最后登录时间（毫秒时间戳）
+     */
+    private Long lastLoginTime;
 }

@@ -57,11 +57,17 @@ public class GlobalExceptionHandler {
 
     /**
      * 未知异常（兜底）
+     * <p>
+     * 默认只打类名 + message，避免完整堆栈泄露内部结构到日志系统；
+     * 如需排查，把 com.lanprojects.fitcoach 的日志级别调到 DEBUG 才打印堆栈。
      */
     @ExceptionHandler(Exception.class)
     @ResponseStatus(HttpStatus.INTERNAL_SERVER_ERROR)
     public Result<?> handleException(Exception e) {
-        log.error("未知异常", e);
+        log.error("未知异常: type={}, message={}", e.getClass().getSimpleName(), e.getMessage());
+        if (log.isDebugEnabled()) {
+            log.debug("未知异常堆栈", e);
+        }
         return Result.error(ResultCode.ERROR);
     }
 }

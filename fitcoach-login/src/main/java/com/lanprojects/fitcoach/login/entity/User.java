@@ -16,8 +16,8 @@ import java.time.LocalDateTime;
 @NoArgsConstructor
 @Entity
 @Table(name = "user", indexes = {
-        @Index(name = "idx_open_id", columnList = "open_id"),
-        @Index(name = "idx_union_id", columnList = "union_id")
+        @Index(name = "uk_open_id", columnList = "open_id", unique = true),
+        @Index(name = "uk_union_id", columnList = "union_id", unique = true)
 })
 public class User extends BaseEntity {
 
@@ -48,6 +48,8 @@ public class User extends BaseEntity {
 
     /**
      * 第三方平台 openid
+     * <p>
+     * unique 约束在 {@link Table#indexes()} 上声明，避免并发登录创建多条记录。
      */
     @Column(name = "open_id", length = 100)
     private String openId;
