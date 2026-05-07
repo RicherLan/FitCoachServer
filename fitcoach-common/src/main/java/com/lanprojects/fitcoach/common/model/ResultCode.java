@@ -46,7 +46,19 @@ public enum ResultCode {
     AVATAR_FILE_EMPTY(5101, "头像文件为空"),
     AVATAR_FILE_TOO_LARGE(5102, "头像文件过大，请重新选择"),
     AVATAR_CONTENT_TYPE_INVALID(5103, "仅支持 jpg / png / webp 格式的头像"),
-    AVATAR_STORAGE_ERROR(5104, "头像保存失败，请稍后重试");
+    AVATAR_STORAGE_ERROR(5104, "头像保存失败，请稍后重试"),
+    UPLOAD_FILE_TOO_LARGE(5901, "上传文件过大，请压缩后重试"),
+
+    // ====== 意见反馈 6xxx ======
+    FEEDBACK_TYPE_INVALID(6001, "反馈类型不合法"),
+    FEEDBACK_CONTENT_EMPTY(6002, "反馈内容不能为空"),
+    FEEDBACK_CONTENT_TOO_LONG(6003, "反馈内容超过最大长度限制"),
+    FEEDBACK_ATTACHMENT_TOO_MANY(6004, "附件数量超过限制"),
+    FEEDBACK_ATTACHMENT_URL_INVALID(6005, "存在非法的附件 URL"),
+    FEEDBACK_ATTACHMENT_FILE_EMPTY(6101, "附件文件为空"),
+    FEEDBACK_ATTACHMENT_FILE_TOO_LARGE(6102, "附件文件过大，请重新选择"),
+    FEEDBACK_ATTACHMENT_CONTENT_TYPE_INVALID(6103, "附件仅支持 jpg / png / webp 格式"),
+    FEEDBACK_ATTACHMENT_STORAGE_ERROR(6104, "附件保存失败，请稍后重试");
 
     private final int code;
     private final String message;

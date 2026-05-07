@@ -48,6 +48,12 @@ upload:
     sub-dir: avatar
     max-size-bytes: 2097152                           # 2MB（客户端压缩后留 buffer）
     allowed-content-types: image/jpeg,image/png,image/webp
+  feedback:
+    sub-dir: feedback
+    max-size-bytes: 1048576                           # 1MB / 张（客户端压缩到 1280x1280 q=0.7）
+    max-attachment-count: 5                           # 单条反馈最多 5 张
+    max-content-length: 1000                          # 正文最长 1000 字
+    allowed-content-types: image/jpeg,image/png,image/webp
 
 # ====== 短信服务 ======
 # provider 取值：

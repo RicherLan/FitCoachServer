@@ -40,6 +40,9 @@ public class UploadProperties {
     /** 头像专用配置 */
     private Avatar avatar = new Avatar();
 
+    /** 意见反馈附件专用配置 */
+    private Feedback feedback = new Feedback();
+
     @Data
     public static class Avatar {
         /** 头像存放的相对子目录（拼到 baseDir 之后） */
@@ -55,6 +58,32 @@ public class UploadProperties {
         private List<String> allowedContentTypes = Arrays.asList("image/jpeg", "image/png", "image/webp");
 
         /** 让外部读到不可变 list，防止意外修改。 */
+        public List<String> getAllowedContentTypesView() {
+            return Collections.unmodifiableList(allowedContentTypes);
+        }
+    }
+
+    /**
+     * 意见反馈附件配置。
+     * <p>与 Avatar 隔离：反馈附件可能更多张、文件类型可能不一样，独立配置便于后续按需调整。
+     */
+    @Data
+    public static class Feedback {
+        /** 反馈附件存放子目录 */
+        private String subDir = "feedback";
+
+        /** 单个附件最大字节数；客户端会先压缩，服务端兜底校验 */
+        private long maxSizeBytes = 1024 * 1024L;
+
+        /** 单条反馈最多附件数；保护数据库 + 存储 */
+        private int maxAttachmentCount = 5;
+
+        /** 允许的 MIME 类型；本期仅支持图片，视频后续再加 */
+        private List<String> allowedContentTypes = Arrays.asList("image/jpeg", "image/png", "image/webp");
+
+        /** 反馈正文最大字符数 */
+        private int maxContentLength = 1000;
+
         public List<String> getAllowedContentTypesView() {
             return Collections.unmodifiableList(allowedContentTypes);
         }

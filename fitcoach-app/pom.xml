@@ -24,6 +24,10 @@
             <groupId>com.lanprojects</groupId>
             <artifactId>fitcoach-login</artifactId>
         </dependency>
+        <dependency>
+            <groupId>com.lanprojects</groupId>
+            <artifactId>fitcoach-feedback</artifactId>
+        </dependency>
 
         <!-- MySQL -->
         <dependency>

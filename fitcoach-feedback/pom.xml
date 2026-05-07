@@ -1,0 +1,30 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd">
+    <modelVersion>4.0.0</modelVersion>
+
+    <parent>
+        <groupId>com.lanprojects</groupId>
+        <artifactId>fitcoach-server</artifactId>
+        <version>1.0.0-SNAPSHOT</version>
+    </parent>
+
+    <artifactId>fitcoach-feedback</artifactId>
+    <name>FitCoach Feedback</name>
+    <description>意见反馈模块：用户反馈提交、附件上传、运营查询入口（待）</description>
+
+    <dependencies>
+        <!-- 通用依赖（ResultCode / BusinessException / UploadProperties） -->
+        <dependency>
+            <groupId>com.lanprojects</groupId>
+            <artifactId>fitcoach-common</artifactId>
+        </dependency>
+
+        <!-- 鉴权复用 login 的 AuthService，避免重复实现 token 校验 -->
+        <dependency>
+            <groupId>com.lanprojects</groupId>
+            <artifactId>fitcoach-login</artifactId>
+        </dependency>
+    </dependencies>
+</project>

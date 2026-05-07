@@ -58,14 +58,15 @@ public class GlobalExceptionHandler {
 
     /**
      * Multipart 文件超出 spring.servlet.multipart.max-file-size — 比业务校验更早触发。
-     * <p>客户端通常已本地压缩，触发到这里说明压缩失败 / 恶意请求；
-     * 用 5102 错误码与 AVATAR_FILE_TOO_LARGE 对齐，前端可统一展示。
+     * <p>客户端通常已本地压缩，触发到这里说明压缩失败 / 恶意请求 / 走错接口。
+     * 用通用的 UPLOAD_FILE_TOO_LARGE，避免对头像 / 反馈附件等不同场景下文案不准。
+     * 各业务（头像 5102 / 反馈附件 6102）在 service 层做更细粒度的校验。
      */
     @ExceptionHandler(MaxUploadSizeExceededException.class)
     @ResponseStatus(HttpStatus.OK)
     public Result<?> handleMaxUploadSize(MaxUploadSizeExceededException e) {
         log.warn("上传文件超过 multipart 限制: {}", e.getMessage());
-        return Result.error(ResultCode.AVATAR_FILE_TOO_LARGE);
+        return Result.error(ResultCode.UPLOAD_FILE_TOO_LARGE);
     }
 
     /**
