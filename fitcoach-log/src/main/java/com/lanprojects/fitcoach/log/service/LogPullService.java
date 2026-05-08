@@ -149,7 +149,8 @@ public class LogPullService {
     // ==============================================================
 
     /**
-     * 客户端 GET /api/logs/pending —— 取一条 PENDING 任务并原子改为 UPLOADING。
+     * 客户端通用轮询入口（GET /api/client/poll → LogPullContribution）调用：
+     * 取一条 PENDING 任务并原子改为 UPLOADING。
      *
      * <p>关键：必须在事务内调用 lockTopPendingForUid（PESSIMISTIC_WRITE），同时把状态/assignedAt 落库后才返回。
      * 这样多设备并发同 uid 时只会有一个拿到任务，其他设备拿到 Optional.empty()。

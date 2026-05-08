@@ -4,15 +4,12 @@ import com.lanprojects.fitcoach.common.exception.BusinessException;
 import com.lanprojects.fitcoach.common.model.Result;
 import com.lanprojects.fitcoach.common.model.ResultCode;
 import com.lanprojects.fitcoach.log.dto.LogTaskDto;
-import com.lanprojects.fitcoach.log.dto.PendingTaskDto;
 import com.lanprojects.fitcoach.log.dto.ReportFailureRequest;
 import com.lanprojects.fitcoach.log.dto.UploadLogResponse;
 import com.lanprojects.fitcoach.log.service.LogPullService;
 import com.lanprojects.fitcoach.login.service.AuthService;
-import com.lanprojects.fitcoach.login.service.UserActivityService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
@@ -22,19 +19,21 @@ import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.multipart.MultipartFile;
 
-import java.util.Optional;
-
 /**
- * 客户端日志拉取/上传接口（前缀：/api/logs）。
+ * 客户端日志上传/失败上报接口（前缀：/api/logs）。
  *
  * <p>所有接口需要 Authorization: Bearer accessToken。鉴权与 FeedbackController 同风格 ——
  * 复用 {@link AuthService#getCurrentUser}，不引入 Spring Security。
  *
  * <ul>
- *   <li>GET /api/logs/pending —— 客户端 120s 轮询；命中即把任务状态原子改为 UPLOADING；</li>
  *   <li>POST /api/logs/upload —— multipart 上传 zip；幂等</li>
  *   <li>POST /api/logs/tasks/{id}/fail —— 客户端主动报失败，触发回滚 PENDING 或标 FAILED</li>
  * </ul>
+ *
+ * <p><b>注意</b>：原"客户端拉取 pending 任务"的接口已下线（{@code GET /api/logs/pending}）。
+ * 拉取动作合并到 fitcoach-clientbus 提供的通用轮询入口 {@code GET /api/client/poll}，
+ * 由 {@code LogPullContribution} 通过 SPI 注入到该入口；同时心跳（{@code UserActivityService.touch}）
+ * 也跟随挪到通用入口，本 controller 不再调用心跳。
  */
 @Slf4j
 @RestController
@@ -46,22 +45,6 @@ public class UserLogController {
 
     private final AuthService authService;
     private final LogPullService logPullService;
-    private final UserActivityService userActivityService;
-
-    /**
-     * 拉一条 pending 任务。
-     * <p>未命中：data=null，客户端按 120s 周期下次再来；命中：data=PendingTaskDto。
-     * <p>顺便用这次轮询作为"心跳"更新 user.lastActiveAt，admin 后台据此判定在线/离线
-     * （见 {@link UserActivityService}，写库节流 60s 一次）。
-     */
-    @GetMapping("/pending")
-    public Result<PendingTaskDto> pending(
-            @RequestHeader(value = "Authorization", required = false) String authorization) {
-        String uid = currentUid(authorization);
-        userActivityService.touch(uid);
-        Optional<PendingTaskDto> opt = logPullService.claimNextPending(uid);
-        return Result.success(opt.orElse(null));
-    }
 
     /**
      * 上传 zip。

@@ -97,8 +97,8 @@ public class User extends BaseEntity {
     /**
      * 最后活跃时间（用户客户端最近一次发起业务请求的时间）
      * <p>由 {@link com.lanprojects.fitcoach.login.service.UserActivityService#touch(String)} 更新，
-     * 当前接入点是 fitcoach-log 模块的 120s 客户端轮询接口（GET /api/logs/pending）；
-     * 后续可在更多业务接口里调用 touch() 让在线判定更敏感。
+     * 接入点是 fitcoach-clientbus 模块的客户端通用轮询入口（GET /api/client/poll，120s 周期）；
+     * 该入口聚合了所有未来"服务端推、客户端拉"能力，所以无需在每个业务接口里各自调 touch()。
      * <p>用于 admin 后台显示"在线/离线"：now - lastActiveAt < 5min 视为在线
      * （给 120s 轮询周期 2.5 倍冗余，避免一次轮询丢失就被判离线）。
      */

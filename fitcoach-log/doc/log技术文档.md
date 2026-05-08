@@ -11,7 +11,7 @@
 ```
                                     ┌── PENDING (admin 创建)
                                     │
-       客户端 GET /pending 命中     │  scheduler 24h 未被领走
+       客户端轮询命中（logTask）    │  scheduler 24h 未被领走
        同事务 PESSIMISTIC_WRITE     │      ▼
        原子改 UPLOADING             │   EXPIRED
                                     ▼
@@ -90,25 +90,33 @@
 
 ### 4.2 客户端（需登录，走 AuthService）
 
-#### GET `/api/logs/pending`
+#### 拉取 PENDING 任务
 
-拉一条 pending 任务并领取。**同事务**用 PESSIMISTIC_WRITE 锁取 PENDING → 改 UPLOADING → 写 assignedAt。
+由 fitcoach-clientbus 模块的通用轮询入口 `GET /api/client/poll` 提供，本模块通过实现
+`ClientPollContribution`（见 `LogPullContribution`）把 PENDING 任务以 `logTask` 字段贡献到
+该入口的响应中，**不再单独暴露 `/api/logs/pending`**。
 
-返回（命中）：
+底层仍是 `LogPullService.claimNextPending`：**同事务**用 PESSIMISTIC_WRITE 锁取 PENDING →
+改 UPLOADING → 写 assignedAt。
+
+响应（命中）：
 
 ```json
 {
   "code": 0,
   "data": {
-    "taskId": 123,
-    "recentHours": 24,
-    "expireAtMillis": 1704096000000,
-    "uploadingDeadlineMillis": 1704009600000
+    "logTask": {
+      "taskId": 123,
+      "recentHours": 24,
+      "expireAtMillis": 1704096000000,
+      "uploadingDeadlineMillis": 1704009600000
+    },
+    "serverTime": 1717000000000
   }
 }
 ```
 
-返回（未命中）：`{ "code": 0, "data": null }`
+响应（未命中）：`data` 中不出现 `logTask` 字段。
 
 客户端按 120s 周期轮询；命中后立即开始打包/上传。
 

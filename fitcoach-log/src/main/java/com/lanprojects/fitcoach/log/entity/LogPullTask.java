@@ -19,7 +19,8 @@ import java.time.LocalDateTime;
  * <p>设计要点：
  * <ul>
  *   <li>uid 不做外键 — 与 UserFeedback 同思路，跨模块外键耦合更重；用户被注销也保留任务记录便于追溯；</li>
- *   <li>uid + status 联合索引覆盖客户端 "GET /api/logs/pending"（最高频 path）；</li>
+ *   <li>uid + status 联合索引覆盖客户端通用轮询入口的 logTask 拉取（最高频 path，
+ *       由 LogPullContribution 触发的 LogPullService.claimNextPending 走该索引）；</li>
  *   <li>status + assignedAt 联合索引给 scheduler 扫超时 UPLOADING 用；</li>
  *   <li>status + uploadedAt 联合索引给 scheduler 扫 7 天前 UPLOADED 清理用；</li>
  *   <li>retryCount + failReason 用于失败回溯；</li>

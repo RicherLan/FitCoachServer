@@ -5,10 +5,11 @@ import lombok.AllArgsConstructor;
 import lombok.Data;
 
 /**
- * 客户端轮询 GET /api/logs/pending 的返回。
+ * 客户端通用轮询入口 {@code GET /api/client/poll} 中 {@code data.logTask} 字段的内容。
  *
- * <p>命中：返回 {@code taskId / recentHours / uploadingDeadlineMillis}；
- * 未命中：data 为 null（{@code Result.success(null)}），客户端按 120s 周期下次再来。
+ * <p>命中：返回 {@code taskId / recentHours / expireAtMillis / uploadingDeadlineMillis}；
+ * 未命中：响应 data 中不出现 {@code logTask} 字段（contribution 返回 null 时被 controller 忽略），
+ * 客户端按 120s 周期下次再来。
  */
 @Data
 @AllArgsConstructor

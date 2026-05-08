@@ -1,0 +1,30 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd">
+    <modelVersion>4.0.0</modelVersion>
+
+    <parent>
+        <groupId>com.lanprojects</groupId>
+        <artifactId>fitcoach-server</artifactId>
+        <version>1.0.0-SNAPSHOT</version>
+    </parent>
+
+    <artifactId>fitcoach-clientbus</artifactId>
+    <name>FitCoach ClientBus</name>
+    <description>客户端通用轮询通道：GET /api/client/poll 单接口聚合各模块的"服务端推、客户端拉"能力（日志拉取 / 版本更新 / 远程开关 / 风控强制下线 / 站内信 等），降低轮询开销；同时在此入口统一刷新用户活跃度（admin 在线状态）</description>
+
+    <dependencies>
+        <!-- ClientPollContribution SPI / Result / BusinessException 都在 common -->
+        <dependency>
+            <groupId>com.lanprojects</groupId>
+            <artifactId>fitcoach-common</artifactId>
+        </dependency>
+
+        <!-- 鉴权 + 心跳：AuthService / UserActivityService 来自 login 模块 -->
+        <dependency>
+            <groupId>com.lanprojects</groupId>
+            <artifactId>fitcoach-login</artifactId>
+        </dependency>
+    </dependencies>
+</project>
