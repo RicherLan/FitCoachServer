@@ -111,16 +111,16 @@ public class ExerciseService {
             }
         }
 
-        // 应用 patch（仅允许修改业务字段，不允许改 exerciseKey 和 id）
-        existing.setDisplayName(patch.getDisplayName());
-        existing.setDescription(patch.getDescription());
-        existing.setMuscles(patch.getMuscles());
-        existing.setEmoji(patch.getEmoji());
-        existing.setMuscleGroup(patch.getMuscleGroup());
-        existing.setCameraSetupJson(patch.getCameraSetupJson());
-        existing.setIsFree(patch.getIsFree() != null ? patch.getIsFree() : existing.getIsFree());
-        existing.setSortOrder(patch.getSortOrder() != null ? patch.getSortOrder() : existing.getSortOrder());
-        existing.setEnabled(patch.getEnabled() != null ? patch.getEnabled() : existing.getEnabled());
+        // 应用 patch（PATCH 语义：null = 不动；仅允许修改业务字段，不允许改 exerciseKey 和 id）
+        if (patch.getDisplayName() != null) existing.setDisplayName(patch.getDisplayName());
+        if (patch.getDescription() != null) existing.setDescription(patch.getDescription());
+        if (patch.getMuscles() != null) existing.setMuscles(patch.getMuscles());
+        if (patch.getEmoji() != null) existing.setEmoji(patch.getEmoji());
+        if (patch.getMuscleGroup() != null) existing.setMuscleGroup(patch.getMuscleGroup());
+        if (patch.getCameraSetupJson() != null) existing.setCameraSetupJson(patch.getCameraSetupJson());
+        if (patch.getIsFree() != null) existing.setIsFree(patch.getIsFree());
+        if (patch.getSortOrder() != null) existing.setSortOrder(patch.getSortOrder());
+        if (patch.getEnabled() != null) existing.setEnabled(patch.getEnabled());
 
         Exercise saved = exerciseRepository.save(existing);
         log.info("[exercise] 更新动作 id={} key={} isFree={} enabled={}",

@@ -171,6 +171,66 @@ public class MembershipService {
         });
     }
 
+    // ====== Admin 套餐 CRUD ======
+
+    /** 创建套餐。校验 planCode 唯一。 */
+    @Transactional
+    public MembershipPlan createPlan(MembershipPlan toCreate) {
+        if (toCreate.getPlanCode() == null || toCreate.getPlanCode().isBlank()) {
+            throw new BusinessException(ResultCode.MEMBERSHIP_PLAN_CODE_INVALID);
+        }
+        planRepository.findByPlanCode(toCreate.getPlanCode()).ifPresent(p -> {
+            throw new BusinessException(ResultCode.MEMBERSHIP_PLAN_CODE_DUPLICATE);
+        });
+        toCreate.setId(null);
+        if (toCreate.getEnabled() == null) toCreate.setEnabled(true);
+        if (toCreate.getSortOrder() == null) toCreate.setSortOrder(0);
+        MembershipPlan saved = planRepository.save(toCreate);
+        log.info("[membership] 创建套餐 id={} planCode={} priceCny={}",
+                saved.getId(), saved.getPlanCode(), saved.getPriceCny());
+        return saved;
+    }
+
+    /**
+     * 更新套餐。**禁止改 planCode**（一旦发布会破坏订单 / user_membership 的关联），其它字段允许改。
+     * <p>对 priceUsdCents / applePriceTier / appleProductId / googleProductId 这几个海外字段：
+     * 传 null = 不动；传 -1 / 空串 = 清空。
+     */
+    @Transactional
+    public MembershipPlan updatePlan(Long id, MembershipPlan patch) {
+        MembershipPlan existing = planRepository.findById(id)
+                .orElseThrow(() -> new BusinessException(ResultCode.MEMBERSHIP_PLAN_NOT_FOUND));
+        if (patch.getDisplayName() != null) existing.setDisplayName(patch.getDisplayName());
+        if (patch.getDurationDays() != null) existing.setDurationDays(patch.getDurationDays());
+        if (patch.getPriceCny() != null) existing.setPriceCny(patch.getPriceCny());
+        if (patch.getPriceUsdCents() != null) {
+            existing.setPriceUsdCents(patch.getPriceUsdCents() < 0 ? null : patch.getPriceUsdCents());
+        }
+        if (patch.getApplePriceTier() != null) {
+            existing.setApplePriceTier(patch.getApplePriceTier() < 0 ? null : patch.getApplePriceTier());
+        }
+        if (patch.getAppleProductId() != null) {
+            existing.setAppleProductId(patch.getAppleProductId().isBlank() ? null : patch.getAppleProductId());
+        }
+        if (patch.getGoogleProductId() != null) {
+            existing.setGoogleProductId(patch.getGoogleProductId().isBlank() ? null : patch.getGoogleProductId());
+        }
+        if (patch.getDescription() != null) existing.setDescription(patch.getDescription());
+        if (patch.getSortOrder() != null) existing.setSortOrder(patch.getSortOrder());
+        if (patch.getEnabled() != null) existing.setEnabled(patch.getEnabled());
+
+        MembershipPlan saved = planRepository.save(existing);
+        log.info("[membership] 更新套餐 id={} planCode={} enabled={}",
+                saved.getId(), saved.getPlanCode(), saved.getEnabled());
+        return saved;
+    }
+
+    /** 拿单个套餐（admin 编辑表单用），找不到抛 8002。 */
+    public MembershipPlan getPlan(Long id) {
+        return planRepository.findById(id)
+                .orElseThrow(() -> new BusinessException(ResultCode.MEMBERSHIP_PLAN_NOT_FOUND));
+    }
+
     // ====== 内部 ======
 
     /**

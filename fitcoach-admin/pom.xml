@@ -38,6 +38,23 @@
         </dependency>
 
         <!--
+            盈利能力三模块（Phase 2 加入）：admin 端直接复用业务模块的 entity + service，
+            自己只负责"管理面"的 controller + DTO，不重复实现领域逻辑。
+        -->
+        <dependency>
+            <groupId>com.lanprojects</groupId>
+            <artifactId>fitcoach-exercise</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>com.lanprojects</groupId>
+            <artifactId>fitcoach-membership</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>com.lanprojects</groupId>
+            <artifactId>fitcoach-payment</artifactId>
+        </dependency>
+
+        <!--
             BCrypt 密码哈希通过 fitcoach-login 模块（PasswordEncoderConfig）统一暴露 Bean，
             admin 模块直接 @Autowired BCryptPasswordEncoder 即可，避免两个模块各自定义 Bean 引发冲突。
         -->

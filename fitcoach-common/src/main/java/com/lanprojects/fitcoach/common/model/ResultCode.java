@@ -116,6 +116,7 @@ public enum ResultCode {
     MEMBERSHIP_PLAN_DELETE_DENIED(8007, "该套餐已有用户购买，无法删除（可下架）"),
     MEMBERSHIP_NOT_ACTIVE(8008, "尚未开通会员或会员已过期"),
     MEMBERSHIP_GRANT_DAYS_INVALID(8009, "赠送/延长的天数必须为正整数"),
+    MEMBERSHIP_PLAN_CODE_INVALID(8010, "套餐 code 不能为空"),
 
     // ====== 支付 8101-8199（fitcoach-payment） ======
     PAYMENT_CHANNEL_NOT_AVAILABLE(8101, "当前平台不支持该支付通道"),

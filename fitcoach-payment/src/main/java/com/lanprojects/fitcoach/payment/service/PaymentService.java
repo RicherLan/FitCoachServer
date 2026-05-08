@@ -210,6 +210,44 @@ public class PaymentService {
         log.info("[payment] 关闭订单 orderId={} reason={}", orderId, reason);
     }
 
+    /**
+     * Admin 标记退款 — V1 实现：**仅记账，不实际调用通道退款接口**。
+     *
+     * <p>这样设计的原因：微信商户号未到位，Apple 退款由用户在 Apple 系统直接发起 server 收 notification。
+     * V1 阶段 admin 在后台标记退款用于会计 + 关停会员；真正的「钱原路退回」走线下流程（财务手工微信转账 / 苹果系统）。
+     *
+     * <p>后续接入真正的退款接口时，在此处增加：
+     * <ul>
+     *   <li>调 WeChatPaymentProvider.refund(channelTransactionId, amount)；</li>
+     *   <li>refundStatus 由 PENDING → COMPLETED / FAILED 走真实异步状态。</li>
+     * </ul>
+     *
+     * @param orderId       业务订单号
+     * @param refundCents   退款金额（最小货币单位），<=0 时按全额退
+     * @param reason        退款原因（必填，落 fail_reason 便于审计）
+     */
+    @Transactional
+    public PaymentOrder adminMarkRefunded(String orderId, Integer refundCents, String reason) {
+        PaymentOrder order = orderRepository.findByOrderId(orderId)
+                .orElseThrow(() -> new BusinessException(ResultCode.PAYMENT_ORDER_NOT_FOUND));
+        if (order.getStatus() != OrderStatus.PAID) {
+            throw new BusinessException(ResultCode.PAYMENT_ORDER_STATUS_INVALID,
+                    "只允许对 PAID 订单标记退款，当前状态：" + order.getStatus());
+        }
+        int amount = (refundCents == null || refundCents <= 0)
+                ? order.getAmountCents()
+                : Math.min(refundCents, order.getAmountCents());
+
+        order.setStatus(OrderStatus.REFUNDED);
+        order.setRefundStatus(com.lanprojects.fitcoach.payment.entity.RefundStatus.COMPLETED);
+        order.setRefundAmountCents(amount);
+        order.setRefundedAt(LocalDateTime.now());
+        order.setFailReason(reason);
+        orderRepository.save(order);
+        log.info("[payment] Admin 标记退款 orderId={} amount={} reason={}", orderId, amount, reason);
+        return order;
+    }
+
     // ====== 查询 ======
 
     public Optional<PaymentOrder> findByOrderId(String orderId) {
