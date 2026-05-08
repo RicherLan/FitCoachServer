@@ -1,6 +1,7 @@
 package com.lanprojects.fitcoach.admin.dto;
 
 import com.lanprojects.fitcoach.login.entity.User;
+import com.lanprojects.fitcoach.login.service.UserActivityService;
 import lombok.Builder;
 import lombok.Data;
 
@@ -24,6 +25,10 @@ public class UserDetailDto {
     private Long createdAt;
     private Long updatedAt;
     private Long lastLoginAt;
+    /** 最后活跃时间（毫秒），见 UserSummaryDto 同名字段说明 */
+    private Long lastActiveAt;
+    /** 是否在线 */
+    private Boolean online;
     /** 该用户的反馈总数（关联统计） */
     private Long feedbackCount;
 
@@ -42,6 +47,8 @@ public class UserDetailDto {
                 .createdAt(toMillis(user.getCreatedAt()))
                 .updatedAt(toMillis(user.getUpdatedAt()))
                 .lastLoginAt(toMillis(user.getLastLoginAt()))
+                .lastActiveAt(toMillis(user.getLastActiveAt()))
+                .online(UserActivityService.isOnline(user.getLastActiveAt()))
                 .feedbackCount(feedbackCount)
                 .build();
     }

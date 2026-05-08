@@ -1,6 +1,7 @@
 package com.lanprojects.fitcoach.admin.dto;
 
 import com.lanprojects.fitcoach.login.entity.User;
+import com.lanprojects.fitcoach.login.service.UserActivityService;
 import lombok.Builder;
 import lombok.Data;
 
@@ -20,6 +21,10 @@ public class UserSummaryDto {
     private Boolean enabled;
     private Long createdAt;
     private Long lastLoginAt;
+    /** 最后活跃时间（毫秒），由客户端 120s 轮询心跳更新；从未活跃为 null */
+    private Long lastActiveAt;
+    /** 是否在线：服务端按 ONLINE_WINDOW_MS（5min）窗口判断，前端直接展示 */
+    private Boolean online;
 
     public static UserSummaryDto from(User user, String avatarUrlAbsolute, String phoneMasked) {
         return UserSummaryDto.builder()
@@ -32,6 +37,8 @@ public class UserSummaryDto {
                 .enabled(user.getEnabled())
                 .createdAt(toMillis(user.getCreatedAt()))
                 .lastLoginAt(toMillis(user.getLastLoginAt()))
+                .lastActiveAt(toMillis(user.getLastActiveAt()))
+                .online(UserActivityService.isOnline(user.getLastActiveAt()))
                 .build();
     }
 

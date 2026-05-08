@@ -95,6 +95,17 @@ public class User extends BaseEntity {
     private LocalDateTime lastLoginAt;
 
     /**
+     * 最后活跃时间（用户客户端最近一次发起业务请求的时间）
+     * <p>由 {@link com.lanprojects.fitcoach.login.service.UserActivityService#touch(String)} 更新，
+     * 当前接入点是 fitcoach-log 模块的 120s 客户端轮询接口（GET /api/logs/pending）；
+     * 后续可在更多业务接口里调用 touch() 让在线判定更敏感。
+     * <p>用于 admin 后台显示"在线/离线"：now - lastActiveAt < 5min 视为在线
+     * （给 120s 轮询周期 2.5 倍冗余，避免一次轮询丢失就被判离线）。
+     */
+    @Column(name = "last_active_at")
+    private LocalDateTime lastActiveAt;
+
+    /**
      * 登录方式枚举
      * <p>新增登录方式时只需在此处加值 + 实现对应 Service/Controller，
      * 数据库列已通过 {@code @Enumerated(EnumType.STRING)} 兼容新值。

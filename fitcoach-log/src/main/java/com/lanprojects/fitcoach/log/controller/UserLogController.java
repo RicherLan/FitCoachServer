@@ -9,6 +9,7 @@ import com.lanprojects.fitcoach.log.dto.ReportFailureRequest;
 import com.lanprojects.fitcoach.log.dto.UploadLogResponse;
 import com.lanprojects.fitcoach.log.service.LogPullService;
 import com.lanprojects.fitcoach.login.service.AuthService;
+import com.lanprojects.fitcoach.login.service.UserActivityService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -45,15 +46,19 @@ public class UserLogController {
 
     private final AuthService authService;
     private final LogPullService logPullService;
+    private final UserActivityService userActivityService;
 
     /**
      * 拉一条 pending 任务。
      * <p>未命中：data=null，客户端按 120s 周期下次再来；命中：data=PendingTaskDto。
+     * <p>顺便用这次轮询作为"心跳"更新 user.lastActiveAt，admin 后台据此判定在线/离线
+     * （见 {@link UserActivityService}，写库节流 60s 一次）。
      */
     @GetMapping("/pending")
     public Result<PendingTaskDto> pending(
             @RequestHeader(value = "Authorization", required = false) String authorization) {
         String uid = currentUid(authorization);
+        userActivityService.touch(uid);
         Optional<PendingTaskDto> opt = logPullService.claimNextPending(uid);
         return Result.success(opt.orElse(null));
     }
