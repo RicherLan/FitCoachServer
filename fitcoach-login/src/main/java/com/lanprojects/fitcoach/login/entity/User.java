@@ -115,6 +115,38 @@ public class User extends BaseEntity {
     @Column(name = "last_active_at")
     private LocalDateTime lastActiveAt;
 
+    // ====== 单设备登录互踢 ======
+    // 仅当客户端请求带真实 deviceId（ClientContext.get().hasDeviceId() == true）的登录才会写入；
+    // admin 后台 / Postman / 早期未就绪窗口 的登录会保持 null，从而**不参与互踢**（向后兼容）。
+
+    /**
+     * 当前活跃 session 的 UUID。
+     * <p>每次客户端登录（含同设备重登）都会生成新值并签入 JWT 的 {@code sid} claim。
+     * <p>{@link com.lanprojects.fitcoach.login.service.AuthService#getCurrentUser(String)} 在校验 token 时
+     * 比对 jwt.sid 与本字段，不一致即抛 {@link com.lanprojects.fitcoach.common.model.ResultCode#SESSION_KICKED}。
+     * <p>null 表示"该用户暂无受互踢保护的活跃 session"——可能从未通过带 deviceId 的客户端登录过，
+     * 此时所有未带 sid claim 的旧 token 都视为有效（向后兼容）。
+     */
+    @Column(name = "current_session_id", length = 64)
+    private String currentSessionId;
+
+    /**
+     * 当前活跃 session 对应的设备 ID。
+     * <p>登录时若 {@code !deviceId.equals(currentDeviceId)} 即视为"换设备登录"，会把 currentSessionId 翻新，
+     * 从而把旧设备的 token 立即作废（旧设备下次请求时被踢）。
+     * <p>同 deviceId 重登也会翻新 sessionId（旧 token 立即失效是 JWT 替换的自然结果），
+     * 但用户没换设备无需 toast；客户端判断"是否换了设备"由旧设备收到 SESSION_KICKED 时自然触发。
+     */
+    @Column(name = "current_device_id", length = 64)
+    private String currentDeviceId;
+
+    /**
+     * 当前 session 的发起时间，便于将来在被踢提示里展示"于 yyyy-MM-dd HH:mm 在另一设备登录"，
+     * 也便于 admin 排查异地登录类客诉。
+     */
+    @Column(name = "current_login_at")
+    private LocalDateTime currentLoginAt;
+
     /**
      * 登录方式枚举
      * <p>新增登录方式时只需在此处加值 + 实现对应 Service/Controller，

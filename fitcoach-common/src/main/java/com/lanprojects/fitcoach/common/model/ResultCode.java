@@ -21,6 +21,15 @@ public enum ResultCode {
     TOKEN_INVALID(1003, "无效的登录凭证"),
     REFRESH_TOKEN_INVALID(1004, "刷新凭证无效或已过期，请重新登录"),
     JWT_SECRET_MISSING(1005, "JWT 密钥未配置，请联系管理员"),
+    /**
+     * 单设备登录互踢：当前会话已被同一账号在另一设备登录的请求挤下线。
+     * <p>触发链路：客户端 token 中的 sid 与 server 端 user.currentSessionId 不一致 →
+     * {@link com.lanprojects.fitcoach.login.service.AuthService#getCurrentUser(String)} 抛此码 →
+     * RN httpClient 全局拦截 → Toast"账号已在其他设备登录" + 强制 logout 跳登录页。
+     * <p>仅当请求带有真实 deviceId（{@code ClientContext.get().hasDeviceId() == true}）的客户端登录时才会写入
+     * user.currentSessionId，因此 admin 后台 / Postman 等无 deviceId 的调试场景不会被互踢。
+     */
+    SESSION_KICKED(1006, "账号已在其他设备登录"),
 
     // ====== 微信登录 2xxx ======
     WECHAT_CODE_INVALID(2001, "微信授权码无效"),

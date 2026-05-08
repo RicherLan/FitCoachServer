@@ -1,5 +1,6 @@
 package com.lanprojects.fitcoach.login.service;
 
+import com.lanprojects.fitcoach.common.client.ClientContext;
 import com.lanprojects.fitcoach.common.config.service.SysConfigService;
 import com.lanprojects.fitcoach.common.exception.BusinessException;
 import com.lanprojects.fitcoach.common.model.ResultCode;
@@ -97,17 +98,12 @@ public class AuthService {
     }
 
     /**
-     * 通过 access token 获取当前用户信息
+     * 通过 access token 获取当前用户信息。
+     * <p>同时校验单设备登录互踢：jwt.sid 与 user.currentSessionId 不一致即抛
+     * {@link ResultCode#SESSION_KICKED}。无 sid claim 的老 token 跳过该校验（向后兼容）。
      */
     public LoginResponse getCurrentUser(String accessToken) {
-        String jwtSecret = requireJwtSecret();
-        String uid = JwtUtils.parseAndVerify(accessToken, jwtSecret, JwtUtils.TYPE_ACCESS);
-
-        User user = userRepository.findByUid(uid)
-                .orElseThrow(() -> new BusinessException(ResultCode.USER_NOT_FOUND));
-        if (!user.getEnabled()) {
-            throw new BusinessException(ResultCode.USER_DISABLED);
-        }
+        User user = parseAndAssertSession(accessToken, JwtUtils.TYPE_ACCESS);
 
         // /me 接口只返回基础信息，不再附带 token / refreshToken
         return LoginResponse.builder()
@@ -122,35 +118,79 @@ public class AuthService {
     }
 
     /**
-     * 用 refresh token 换取新的 access token + refresh token（refresh 也滚动续期）
+     * 用 refresh token 换取新的 access token + refresh token（refresh 也滚动续期）。
+     * <p>refreshToken 也参与单设备互踢校验：旧设备拿着旧 refreshToken 来续 → sid 不匹配即抛
+     * {@link ResultCode#SESSION_KICKED}，避免被踢的设备靠 refresh 偷偷续命。
+     * <p>校验通过后**沿用同一个 sessionId** 颁新 token —— 用户自己 refresh 不应该把自己挤掉。
      */
     @Transactional
     public LoginResponse refresh(String refreshToken) {
-        String jwtSecret = requireJwtSecret();
-        String uid = JwtUtils.parseAndVerify(refreshToken, jwtSecret, JwtUtils.TYPE_REFRESH);
-
-        User user = userRepository.findByUid(uid)
-                .orElseThrow(() -> new BusinessException(ResultCode.USER_NOT_FOUND));
-        if (!user.getEnabled()) {
-            throw new BusinessException(ResultCode.USER_DISABLED);
-        }
-
-        log.info("刷新 access token, uid={}", uid);
-        return buildLoginResponse(user);
+        User user = parseAndAssertSession(refreshToken, JwtUtils.TYPE_REFRESH);
+        log.info("刷新 access token, uid={}", user.getUid());
+        // 沿用旧 sid（user.currentSessionId 当前值）：refresh 不滚动 sessionId，
+        // 不写库（avoid 写脏；user 没字段被改）
+        return signTokensWithSession(user, user.getCurrentSessionId());
     }
 
     // ====== 内部方法 ======
 
     /**
-     * 根据 user 颁发 access + refresh，组装完整 LoginResponse
+     * 解析 token + 校验 user enabled + 单设备互踢 sid 比对。
+     * <p>抽公共方法供 getCurrentUser / refresh 共用，保证语义一致。
+     */
+    private User parseAndAssertSession(String token, String expectedType) {
+        String jwtSecret = requireJwtSecret();
+        JwtUtils.JwtPayload payload = JwtUtils.parsePayload(token, jwtSecret, expectedType);
+
+        User user = userRepository.findByUid(payload.uid())
+                .orElseThrow(() -> new BusinessException(ResultCode.USER_NOT_FOUND));
+        if (!user.getEnabled()) {
+            throw new BusinessException(ResultCode.USER_DISABLED);
+        }
+
+        // 单设备登录互踢校验：
+        //  - token 带了 sid（说明是新版客户端 / 带 deviceId 的登录）→ 必须与 user.currentSessionId 一致；
+        //  - token 没带 sid（老 token / admin 后台 / Postman）→ 跳过校验，保持向后兼容；
+        //  - user.currentSessionId 为 null（用户从未通过带 deviceId 的客户端登录）→ 跳过校验，
+        //    旧 token 自然过期/refresh 后会自动获得 sid。
+        String tokenSid = payload.sessionId();
+        String activeSid = user.getCurrentSessionId();
+        if (tokenSid != null && activeSid != null && !tokenSid.equals(activeSid)) {
+            log.info("session 互踢命中, uid={}, tokenSid={}, activeSid={}",
+                    user.getUid(), LogUtils.mask(tokenSid), LogUtils.mask(activeSid));
+            throw new BusinessException(ResultCode.SESSION_KICKED);
+        }
+        return user;
+    }
+
+    /**
+     * 根据 user 颁发 access + refresh，组装完整 LoginResponse。
+     * <p>登录入口（wechat/phone/password）调用本方法时，会触发"单设备登录互踢" sessionId 滚动逻辑：
+     * 当 {@code ClientContext.get().hasDeviceId() == true} 时，无论同设备还是异设备登录都生成新 UUID
+     * 写到 user.currentSessionId 并写入 JWT 的 sid claim；旧设备的旧 token 即刻在
+     * {@link #parseAndAssertSession(String, String)} 处被拒。
+     * <p>无 deviceId 的请求（admin / Postman / 客户端早期未就绪窗口）不写 currentSessionId、
+     * JWT 也不带 sid，保持完全的向后兼容。
      */
     private LoginResponse buildLoginResponse(User user) {
+        String newSessionId = rotateSessionForLogin(user);
+        return signTokensWithSession(user, newSessionId);
+    }
+
+    /**
+     * 仅做"颁 token"的纯函数：不动 user 表，按给定 sessionId 签出 access + refresh。
+     * <p>登录走 {@link #buildLoginResponse(User)}（先 rotate sid 再调本方法）；
+     * refresh 走"沿用旧 sid"路径直接调本方法。
+     */
+    private LoginResponse signTokensWithSession(User user, String sessionId) {
         String jwtSecret = requireJwtSecret();
         int accessHours = sysConfigService.getIntValue(CONFIG_JWT_EXPIRE_HOURS, DEFAULT_ACCESS_EXPIRE_HOURS);
         int refreshHours = sysConfigService.getIntValue(CONFIG_JWT_REFRESH_EXPIRE_HOURS, DEFAULT_REFRESH_EXPIRE_HOURS);
 
-        String accessToken = JwtUtils.generateAccessToken(user.getUid(), jwtSecret, accessHours * 3600_000L);
-        String refreshToken = JwtUtils.generateRefreshToken(user.getUid(), jwtSecret, refreshHours * 3600_000L);
+        String accessToken = JwtUtils.generateAccessToken(
+                user.getUid(), jwtSecret, accessHours * 3600_000L, sessionId);
+        String refreshToken = JwtUtils.generateRefreshToken(
+                user.getUid(), jwtSecret, refreshHours * 3600_000L, sessionId);
 
         return LoginResponse.builder()
                 .uid(user.getUid())
@@ -165,6 +205,43 @@ public class AuthService {
                 .createTime(toMillis(user.getCreatedAt()))
                 .lastLoginTime(toMillis(user.getLastLoginAt()))
                 .build();
+    }
+
+    /**
+     * 登录时刷新 user 的 currentSessionId / currentDeviceId / currentLoginAt。
+     * <p>仅当请求带真实 deviceId（{@code ClientContext.get().hasDeviceId() == true}）才落库；
+     * 否则返回 null（JWT 也不带 sid claim，保持向后兼容）。
+     * <p>注意：同设备重登也会翻新 sessionId，这是预期 —— 旧 token 立即作废，避免老设备保留无效会话。
+     *
+     * @return 新生成的 sessionId（null 表示本次登录不参与单设备互踢）
+     */
+    private String rotateSessionForLogin(User user) {
+        var info = ClientContext.get();
+        if (!info.hasDeviceId()) {
+            // admin 后台 / Postman / 早期未就绪窗口：不参与互踢，保持向后兼容
+            return null;
+        }
+        String deviceId = info.deviceId();
+        String oldSid = user.getCurrentSessionId();
+        String oldDeviceId = user.getCurrentDeviceId();
+        boolean deviceChanged = oldDeviceId != null && !oldDeviceId.equals(deviceId);
+
+        String newSid = UUID.randomUUID().toString().replace("-", "");
+        user.setCurrentSessionId(newSid);
+        user.setCurrentDeviceId(deviceId);
+        user.setCurrentLoginAt(LocalDateTime.now());
+        userRepository.save(user);
+
+        if (deviceChanged) {
+            // 真正的"换设备登录"：旧设备的下一个请求会拿到 SESSION_KICKED 被弹出
+            log.info("device switch, uid={}, oldDevice={}, newDevice={}, oldSid={}, newSid={}",
+                    user.getUid(), LogUtils.mask(oldDeviceId), LogUtils.mask(deviceId),
+                    LogUtils.mask(oldSid), LogUtils.mask(newSid));
+        } else {
+            log.info("session rotated, uid={}, deviceId={}, newSid={}",
+                    user.getUid(), LogUtils.mask(deviceId), LogUtils.mask(newSid));
+        }
+        return newSid;
     }
 
     private String requireJwtSecret() {
