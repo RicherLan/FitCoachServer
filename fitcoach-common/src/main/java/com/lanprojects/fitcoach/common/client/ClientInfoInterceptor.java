@@ -7,15 +7,16 @@ import org.springframework.stereotype.Component;
 import org.springframework.web.servlet.HandlerInterceptor;
 
 /**
- * 客户端版本信息拦截器 — 解析 {@code X-Client-*} Header → {@link ClientContext}。
+ * 客户端版本信息拦截器 — 解析 {@code X-Client-*} / {@code X-Device-Id} Header → {@link ClientContext}。
  *
- * <p><b>跨端协议（Header 五件套）</b>：
+ * <p><b>跨端协议（Header 六件套）</b>：
  * <ul>
  *   <li>{@link #HDR_PLATFORM}            — "android" / "ios"</li>
  *   <li>{@link #HDR_NATIVE_VERSION_CODE} — int，如 1002003（即 1.2.3 编码后）</li>
  *   <li>{@link #HDR_NATIVE_VERSION_NAME} — string，如 "1.2.3"</li>
  *   <li>{@link #HDR_BUNDLE_VERSION_CODE} — int，OTA 后会与 native 不同</li>
  *   <li>{@link #HDR_BUNDLE_VERSION_NAME} — string</li>
+ *   <li>{@link #HDR_DEVICE_ID}           — string，RN 端 UUIDv4 / "unknown" / 缺失</li>
  * </ul>
  *
  * <p><b>缺失/格式错误兜底</b>：
@@ -42,6 +43,7 @@ public class ClientInfoInterceptor implements HandlerInterceptor {
     public static final String HDR_NATIVE_VERSION_NAME = "X-Client-Native-Version-Name";
     public static final String HDR_BUNDLE_VERSION_CODE = "X-Client-Bundle-Version-Code";
     public static final String HDR_BUNDLE_VERSION_NAME = "X-Client-Bundle-Version-Name";
+    public static final String HDR_DEVICE_ID = "X-Device-Id";
 
     @Override
     public boolean preHandle(HttpServletRequest request, HttpServletResponse response, Object handler) {
@@ -50,14 +52,16 @@ public class ClientInfoInterceptor implements HandlerInterceptor {
         String nativeName = trimToNull(request.getHeader(HDR_NATIVE_VERSION_NAME));
         int bundleCode = parseIntSafe(request.getHeader(HDR_BUNDLE_VERSION_CODE));
         String bundleName = trimToNull(request.getHeader(HDR_BUNDLE_VERSION_NAME));
+        String deviceId = trimToNull(request.getHeader(HDR_DEVICE_ID));
 
-        ClientVersionInfo info = new ClientVersionInfo(platform, nativeCode, nativeName, bundleCode, bundleName);
+        ClientVersionInfo info = new ClientVersionInfo(
+                platform, nativeCode, nativeName, bundleCode, bundleName, deviceId);
         ClientContext.set(info);
 
         // DEBUG 级日志：avoid 生产刷屏；排错时调到 DEBUG 即可看到每个请求的客户端信息
         if (log.isDebugEnabled() && !info.isEmpty()) {
-            log.debug("client: platform={} native={}({}) bundle={}({}) uri={}",
-                    platform, nativeName, nativeCode, bundleName, bundleCode, request.getRequestURI());
+            log.debug("client: platform={} native={}({}) bundle={}({}) device={} uri={}",
+                    platform, nativeName, nativeCode, bundleName, bundleCode, deviceId, request.getRequestURI());
         }
         return true;
     }

@@ -74,4 +74,15 @@ public final class ClientContext {
     public static boolean isIos() {
         return get().isIos();
     }
+
+    /**
+     * 当前请求的设备唯一标识。
+     * <p>RN 端首次安装生成 UUIDv4 持久化，后续启动复用。
+     * <p>缺失时返回 null（admin 后台、Postman 调试），客户端早期未就绪窗口返回 "unknown"。
+     * <p>需要严格判断"是否拿到真实 deviceId"（如单设备登录互踢、风控）请用
+     * {@code ClientContext.get().hasDeviceId()}。
+     */
+    public static String deviceId() {
+        return get().deviceId();
+    }
 }
