@@ -24,6 +24,9 @@
         <module>fitcoach-feedback</module>
         <module>fitcoach-log</module>
         <module>fitcoach-clientbus</module>
+        <module>fitcoach-exercise</module>
+        <module>fitcoach-membership</module>
+        <module>fitcoach-payment</module>
         <module>fitcoach-admin</module>
         <module>fitcoach-app</module>
     </modules>
@@ -63,6 +66,21 @@
             <dependency>
                 <groupId>com.lanprojects</groupId>
                 <artifactId>fitcoach-clientbus</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>com.lanprojects</groupId>
+                <artifactId>fitcoach-exercise</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>com.lanprojects</groupId>
+                <artifactId>fitcoach-membership</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>com.lanprojects</groupId>
+                <artifactId>fitcoach-payment</artifactId>
                 <version>${project.version}</version>
             </dependency>
             <dependency>

@@ -1,0 +1,33 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd">
+    <modelVersion>4.0.0</modelVersion>
+
+    <parent>
+        <groupId>com.lanprojects</groupId>
+        <artifactId>fitcoach-server</artifactId>
+        <version>1.0.0-SNAPSHOT</version>
+    </parent>
+
+    <artifactId>fitcoach-exercise</artifactId>
+    <name>FitCoach Exercise</name>
+    <description>
+        健身动作领域模块：动作元数据（Exercise / ExerciseCategory）、动作权限校验。
+        从 RN 端硬编码搬迁过来，支持 admin 后台维护、is_free 字段控制免费/付费。
+    </description>
+
+    <dependencies>
+        <!-- 通用依赖：Result / ResultCode / BusinessException / BaseEntity -->
+        <dependency>
+            <groupId>com.lanprojects</groupId>
+            <artifactId>fitcoach-common</artifactId>
+        </dependency>
+
+        <!-- 鉴权 + User 实体（动作访问控制需要识别用户） -->
+        <dependency>
+            <groupId>com.lanprojects</groupId>
+            <artifactId>fitcoach-login</artifactId>
+        </dependency>
+    </dependencies>
+</project>

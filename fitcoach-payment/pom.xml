@@ -1,0 +1,39 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd">
+    <modelVersion>4.0.0</modelVersion>
+
+    <parent>
+        <groupId>com.lanprojects</groupId>
+        <artifactId>fitcoach-server</artifactId>
+        <version>1.0.0-SNAPSHOT</version>
+    </parent>
+
+    <artifactId>fitcoach-payment</artifactId>
+    <name>FitCoach Payment</name>
+    <description>
+        支付域模块：订单（PaymentOrder）、回调日志（PaymentCallbackLog）、支付通道抽象（PaymentChannelProvider）。
+        内置 WeChatPaymentProvider / MockPaymentProvider / AppleIAPProvider（占位），通过 SysConfig 切换激活的通道。
+        支付成功后发布 PaymentSucceededEvent，由 membership 模块监听激活会员。
+    </description>
+
+    <dependencies>
+        <!-- 通用依赖（含支付事件类 PaymentSucceededEvent） -->
+        <dependency>
+            <groupId>com.lanprojects</groupId>
+            <artifactId>fitcoach-common</artifactId>
+        </dependency>
+
+        <!-- 鉴权 + User 实体 + ClientContext（支付时区分平台决定通道） -->
+        <dependency>
+            <groupId>com.lanprojects</groupId>
+            <artifactId>fitcoach-login</artifactId>
+        </dependency>
+
+        <!--
+            payment 不依赖 membership：保持模块单向依赖
+            membership 通过 @EventListener(PaymentSucceededEvent) 单向监听
+        -->
+    </dependencies>
+</project>

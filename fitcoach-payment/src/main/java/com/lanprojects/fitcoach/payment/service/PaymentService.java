@@ -1,0 +1,280 @@
+package com.lanprojects.fitcoach.payment.service;
+
+import com.lanprojects.fitcoach.common.event.PaymentSucceededEvent;
+import com.lanprojects.fitcoach.common.exception.BusinessException;
+import com.lanprojects.fitcoach.common.model.ResultCode;
+import com.lanprojects.fitcoach.payment.entity.OrderStatus;
+import com.lanprojects.fitcoach.payment.entity.PaymentChannel;
+import com.lanprojects.fitcoach.payment.entity.PaymentOrder;
+import com.lanprojects.fitcoach.payment.provider.CreateOrderRequest;
+import com.lanprojects.fitcoach.payment.provider.CreateOrderResult;
+import com.lanprojects.fitcoach.payment.provider.PaymentChannelProvider;
+import com.lanprojects.fitcoach.payment.repository.PaymentOrderRepository;
+import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
+import org.springframework.context.ApplicationEventPublisher;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
+import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
+
+import java.time.LocalDateTime;
+import java.time.format.DateTimeFormatter;
+import java.util.HashMap;
+import java.util.Map;
+import java.util.Optional;
+import java.util.concurrent.ThreadLocalRandom;
+
+/**
+ * 支付核心服务 — 编排「下单 / 通道路由 / 落库 / 触发会员激活事件」。
+ *
+ * <p><b>关键流程：下单</b>
+ * <ol>
+ *   <li>查 plan 校验有效；</li>
+ *   <li>路由器决定 / 校验通道可用；</li>
+ *   <li>生成 orderId（业务订单号），先入库 PENDING；</li>
+ *   <li>调 Provider 创建通道侧订单，得 prepay_id 等；</li>
+ *   <li>更新 PaymentOrder 的 prepayId；</li>
+ *   <li>若 Provider 返回 immediatelyPaid=true（Mock）→ 事务内调 markPaid；</li>
+ *   <li>commit 后 markPaid 内的 publishEvent 才生效（@TransactionalEventListener AFTER_COMMIT）。</li>
+ * </ol>
+ *
+ * <p><b>「PaymentService 不依赖 MembershipService」</b>：
+ * Plan 详情由调用方（Controller / 上层服务）查好后通过 {@link PlanSnapshot} 传入，
+ * 激活完全走 Spring 事件解耦——payment 模块只发事件，不知道「监听者是谁、是否激活成功」。
+ * 这样 payment 和 membership 两个模块在编译期完全独立，互不感知。
+ */
+@Slf4j
+@Service
+@RequiredArgsConstructor
+public class PaymentService {
+
+    private static final DateTimeFormatter ORDER_ID_FORMAT = DateTimeFormatter.ofPattern("yyyyMMddHHmmss");
+    private static final String CURRENCY_CNY = "CNY";
+    private static final String CURRENCY_USD = "USD";
+
+    private final PaymentOrderRepository orderRepository;
+    private final PaymentChannelRouter channelRouter;
+    private final ApplicationEventPublisher eventPublisher;
+
+    // ====== 创建订单 ======
+
+    /**
+     * 创建支付订单（核心入口）。
+     */
+    @Transactional
+    public CreateOrderResponse createOrder(CreateOrderCommand cmd) {
+        PlanSnapshot plan = cmd.plan();
+        if (plan == null || plan.planCode() == null || plan.priceCny() == null || plan.priceCny() <= 0) {
+            throw new BusinessException(ResultCode.MEMBERSHIP_PLAN_PRICE_INVALID,
+                    "下单套餐快照不完整或价格非法");
+        }
+
+        // 1. 路由通道
+        PaymentChannel channel = cmd.channel() != null
+                ? cmd.channel()
+                : channelRouter.resolveDefault(cmd.clientPlatform());
+        PaymentChannelProvider provider = channelRouter.require(channel);
+
+        // 2. 计算金额 + 币种（按通道决定币种，非常关键 —— 微信只能 CNY，Apple 必须本地币）
+        int amountCents;
+        String currency;
+        if (channel == PaymentChannel.APPLE_IAP || channel == PaymentChannel.GOOGLE_PLAY) {
+            if (plan.priceUsdCents() == null || plan.priceUsdCents() <= 0) {
+                throw new BusinessException(ResultCode.PAYMENT_CONFIG_MISSING,
+                        "套餐 " + plan.planCode() + " 缺少海外价格配置（priceUsdCents）");
+            }
+            amountCents = plan.priceUsdCents();
+            currency = CURRENCY_USD;
+        } else {
+            amountCents = plan.priceCny();
+            currency = CURRENCY_CNY;
+        }
+
+        // 3. 生成订单号 + 落库 PENDING
+        String orderId = generateOrderId(cmd.userId());
+        PaymentOrder order = new PaymentOrder();
+        order.setOrderId(orderId);
+        order.setUserId(cmd.userId());
+        order.setPlanCode(plan.planCode());
+        order.setPlanSnapshotName(plan.displayName());
+        order.setChannel(channel);
+        order.setClientPlatform(cmd.clientPlatform());
+        order.setAmountCents(amountCents);
+        order.setCurrency(currency);
+        order.setStatus(OrderStatus.PENDING);
+        order = orderRepository.save(order);
+        log.info("[payment] 创建订单 orderId={} userId={} planCode={} channel={} amountCents={} currency={}",
+                orderId, cmd.userId(), plan.planCode(), channel, amountCents, currency);
+
+        // 4. 调 Provider 创建通道侧订单
+        CreateOrderRequest req = new CreateOrderRequest(
+                orderId,
+                cmd.userId(),
+                plan.planCode(),
+                plan.displayName(),
+                amountCents,
+                currency,
+                cmd.clientPlatform(),
+                cmd.clientIp(),
+                buildAttachJson(cmd.userId(), plan.planCode())
+        );
+        CreateOrderResult providerResult = provider.createOrder(req);
+
+        // 5. 更新订单 prepayId
+        if (providerResult.prepayId() != null) {
+            order.setChannelPrepayId(providerResult.prepayId());
+            orderRepository.save(order);
+        }
+
+        // 6. Mock 通道：下单即视为成功
+        if (providerResult.immediatelyPaid()) {
+            markPaid(orderId, providerResult.prepayId(), null);
+        }
+
+        return new CreateOrderResponse(
+                orderId,
+                channel,
+                amountCents,
+                currency,
+                providerResult.clientPayload(),
+                providerResult.immediatelyPaid()
+        );
+    }
+
+    // ====== 标记支付成功（回调 / Mock 都用） ======
+
+    /**
+     * 标记订单已支付，并发布 PaymentSucceededEvent 触发会员激活。
+     *
+     * <p><b>幂等</b>：同一 orderId 重复调用直接 return 不再发事件，防止：
+     * <ul>
+     *   <li>微信回调网络抖动重试；</li>
+     *   <li>定时任务的补偿查询又触发一次。</li>
+     * </ul>
+     *
+     * @param orderId               业务订单号
+     * @param channelPrepayId       通道预支付号（微信 prepay_id），可空
+     * @param channelTransactionId  通道凭证号（微信 transaction_id / Apple transaction_id），可空
+     */
+    @Transactional
+    public void markPaid(String orderId, String channelPrepayId, String channelTransactionId) {
+        PaymentOrder order = orderRepository.findByOrderId(orderId)
+                .orElseThrow(() -> new BusinessException(ResultCode.PAYMENT_ORDER_NOT_FOUND));
+
+        if (order.getStatus() == OrderStatus.PAID) {
+            log.info("[payment] 订单已支付，幂等返回 orderId={}", orderId);
+            return;
+        }
+        if (order.getStatus() != OrderStatus.PENDING) {
+            throw new BusinessException(ResultCode.PAYMENT_ORDER_STATUS_INVALID,
+                    "订单状态不允许标记为已支付：" + order.getStatus());
+        }
+
+        order.setStatus(OrderStatus.PAID);
+        order.setPaidAt(LocalDateTime.now());
+        if (channelPrepayId != null) order.setChannelPrepayId(channelPrepayId);
+        if (channelTransactionId != null) order.setChannelTransactionId(channelTransactionId);
+        orderRepository.save(order);
+
+        // 发布事件 — 会员模块的 @TransactionalEventListener(AFTER_COMMIT) 会在事务提交后激活
+        eventPublisher.publishEvent(PaymentSucceededEvent.builder()
+                .orderId(order.getOrderId())
+                .userId(order.getUserId())
+                .planCode(order.getPlanCode())
+                .channel(order.getChannel().name())
+                .amountCents(order.getAmountCents())
+                .currency(order.getCurrency())
+                .paidAt(order.getPaidAt())
+                .build());
+
+        log.info("[payment] 订单标记已支付 orderId={} userId={} channel={} 已发布事件",
+                orderId, order.getUserId(), order.getChannel());
+    }
+
+    /**
+     * 关闭订单（用户取消 / 超时未付）
+     */
+    @Transactional
+    public void closeOrder(String orderId, String reason) {
+        PaymentOrder order = orderRepository.findByOrderId(orderId)
+                .orElseThrow(() -> new BusinessException(ResultCode.PAYMENT_ORDER_NOT_FOUND));
+        if (order.getStatus() != OrderStatus.PENDING) {
+            // 已支付/已关闭都直接返回，幂等
+            return;
+        }
+        order.setStatus(OrderStatus.CLOSED);
+        order.setClosedAt(LocalDateTime.now());
+        order.setFailReason(reason);
+        orderRepository.save(order);
+        log.info("[payment] 关闭订单 orderId={} reason={}", orderId, reason);
+    }
+
+    // ====== 查询 ======
+
+    public Optional<PaymentOrder> findByOrderId(String orderId) {
+        return orderRepository.findByOrderId(orderId);
+    }
+
+    public PaymentOrder requireOrderForUser(String orderId, Long userId) {
+        PaymentOrder order = orderRepository.findByOrderId(orderId)
+                .orElseThrow(() -> new BusinessException(ResultCode.PAYMENT_ORDER_NOT_FOUND));
+        if (!order.getUserId().equals(userId)) {
+            throw new BusinessException(ResultCode.PAYMENT_ORDER_NOT_OWNED);
+        }
+        return order;
+    }
+
+    public Page<PaymentOrder> listMyOrders(Long userId, Pageable pageable) {
+        return orderRepository.findByUserIdOrderByCreatedAtDesc(userId, pageable);
+    }
+
+    public Page<PaymentOrder> adminList(Pageable pageable) {
+        return orderRepository.findAllByOrderByCreatedAtDesc(pageable);
+    }
+
+    public Page<PaymentOrder> adminListByStatus(OrderStatus status, Pageable pageable) {
+        return orderRepository.findByStatusOrderByCreatedAtDesc(status, pageable);
+    }
+
+    // ====== 内部 ======
+
+    /** 业务订单号生成器：时间戳 + userId 后 4 位 + 4 位随机数。 */
+    private String generateOrderId(Long userId) {
+        String suffix = String.format("%04d",
+                userId == null ? 0 : (Math.abs(userId.intValue()) % 10000));
+        String rand = String.format("%04d", ThreadLocalRandom.current().nextInt(10000));
+        return LocalDateTime.now().format(ORDER_ID_FORMAT) + suffix + rand;
+    }
+
+    /** 微信 attach 字段透传 JSON：本系统将 userId / planCode 编进去，回调时再解。 */
+    private String buildAttachJson(Long userId, String planCode) {
+        return "{\"userId\":" + userId + ",\"planCode\":\"" + planCode + "\"}";
+    }
+
+    // ====== 出参 ======
+
+    /**
+     * 下单结果（Controller → 客户端）。
+     *
+     * @param orderId           业务订单号
+     * @param channel           实际走的通道
+     * @param amountCents       实付金额（最小货币单位）
+     * @param currency          币种
+     * @param clientPayload     客户端拉起支付所需的 SDK 参数
+     * @param immediatelyPaid   该订单已经直接被标记为支付成功（Mock 通道场景，客户端无需拉起 SDK）
+     */
+    public record CreateOrderResponse(
+            String orderId,
+            PaymentChannel channel,
+            int amountCents,
+            String currency,
+            Map<String, Object> clientPayload,
+            boolean immediatelyPaid
+    ) {
+        /** 兜底空 payload */
+        public static CreateOrderResponse empty(String orderId, PaymentChannel channel) {
+            return new CreateOrderResponse(orderId, channel, 0, CURRENCY_CNY, new HashMap<>(), false);
+        }
+    }
+}

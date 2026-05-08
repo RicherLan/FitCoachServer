@@ -98,7 +98,39 @@ public enum ResultCode {
     PASSWORD_OTP_REQUIRED(7404, "首次设置密码需先验证短信验证码"),
     PASSWORD_VERIFY_REQUIRED(7405, "请提供原密码或短信验证码以完成验证"),
     PASSWORD_NOT_SET(7406, "尚未设置密码"),
-    PASSWORD_PHONE_REQUIRED(7407, "请先绑定手机号才能设置密码");
+    PASSWORD_PHONE_REQUIRED(7407, "请先绑定手机号才能设置密码"),
+
+    // ====== 健身动作 7501-7599（fitcoach-exercise） ======
+    EXERCISE_NOT_FOUND(7501, "动作不存在"),
+    EXERCISE_KEY_DUPLICATE(7502, "动作 key 已存在，请勿重复创建"),
+    EXERCISE_DISABLED(7503, "该动作已下架"),
+    EXERCISE_LAST_FREE_IN_GROUP(7504, "该肌群至少需保留一个免费动作，无法将其下线/置为付费"),
+
+    // ====== 会员 8001-8099（fitcoach-membership） ======
+    MEMBERSHIP_REQUIRED(8001, "该功能需要会员才可使用，请先开通会员"),
+    MEMBERSHIP_PLAN_NOT_FOUND(8002, "套餐不存在或已下架"),
+    MEMBERSHIP_PLAN_DISABLED(8003, "该套餐已停售"),
+    MEMBERSHIP_PLAN_DURATION_INVALID(8004, "套餐有效期天数必须大于 0"),
+    MEMBERSHIP_PLAN_PRICE_INVALID(8005, "套餐价格必须大于 0"),
+    MEMBERSHIP_PLAN_CODE_DUPLICATE(8006, "套餐 code 已存在，请勿重复创建"),
+    MEMBERSHIP_PLAN_DELETE_DENIED(8007, "该套餐已有用户购买，无法删除（可下架）"),
+    MEMBERSHIP_NOT_ACTIVE(8008, "尚未开通会员或会员已过期"),
+    MEMBERSHIP_GRANT_DAYS_INVALID(8009, "赠送/延长的天数必须为正整数"),
+
+    // ====== 支付 8101-8199（fitcoach-payment） ======
+    PAYMENT_CHANNEL_NOT_AVAILABLE(8101, "当前平台不支持该支付通道"),
+    PAYMENT_CHANNEL_DISABLED(8102, "该支付通道已停用"),
+    PAYMENT_ORDER_NOT_FOUND(8103, "订单不存在"),
+    PAYMENT_ORDER_NOT_OWNED(8104, "订单不属于当前用户"),
+    PAYMENT_ORDER_STATUS_INVALID(8105, "订单状态不允许此操作"),
+    PAYMENT_ORDER_AMOUNT_MISMATCH(8106, "订单金额校验失败（疑似篡改）"),
+    PAYMENT_CALLBACK_SIGN_INVALID(8107, "支付回调签名校验失败"),
+    PAYMENT_CALLBACK_DUPLICATE(8108, "支付回调重复"),
+    PAYMENT_PROVIDER_ERROR(8109, "支付通道服务异常，请稍后重试"),
+    PAYMENT_RECEIPT_INVALID(8110, "Apple 收据校验失败"),
+    PAYMENT_RECEIPT_ALREADY_USED(8111, "该收据已被使用，请勿重复提交"),
+    PAYMENT_CONFIG_MISSING(8112, "支付通道配置缺失，请联系管理员"),
+    PAYMENT_PLATFORM_REQUIRED(8113, "无法识别客户端平台，请检查请求 Header");
 
     private final int code;
     private final String message;

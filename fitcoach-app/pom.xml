@@ -38,6 +38,18 @@
         </dependency>
         <dependency>
             <groupId>com.lanprojects</groupId>
+            <artifactId>fitcoach-exercise</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>com.lanprojects</groupId>
+            <artifactId>fitcoach-membership</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>com.lanprojects</groupId>
+            <artifactId>fitcoach-payment</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>com.lanprojects</groupId>
             <artifactId>fitcoach-admin</artifactId>
         </dependency>
 

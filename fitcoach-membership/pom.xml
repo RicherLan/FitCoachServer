@@ -1,0 +1,39 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd">
+    <modelVersion>4.0.0</modelVersion>
+
+    <parent>
+        <groupId>com.lanprojects</groupId>
+        <artifactId>fitcoach-server</artifactId>
+        <version>1.0.0-SNAPSHOT</version>
+    </parent>
+
+    <artifactId>fitcoach-membership</artifactId>
+    <name>FitCoach Membership</name>
+    <description>
+        会员域模块：套餐定义（MembershipPlan）、用户会员状态（UserMembership）、特权检查（MembershipPrivilege）。
+        通过监听 fitcoach-payment 发布的 PaymentSucceededEvent 激活会员，与 payment 模块解耦。
+    </description>
+
+    <dependencies>
+        <!-- 通用依赖 -->
+        <dependency>
+            <groupId>com.lanprojects</groupId>
+            <artifactId>fitcoach-common</artifactId>
+        </dependency>
+
+        <!-- 鉴权 + User 实体 -->
+        <dependency>
+            <groupId>com.lanprojects</groupId>
+            <artifactId>fitcoach-login</artifactId>
+        </dependency>
+
+        <!--
+            刻意不依赖 fitcoach-payment：
+            - membership 通过 Spring 事件（PaymentSucceededEvent）感知支付成功
+            - 事件类放在 fitcoach-common 模块下，避免 payment 与 membership 互相依赖
+        -->
+    </dependencies>
+</project>
