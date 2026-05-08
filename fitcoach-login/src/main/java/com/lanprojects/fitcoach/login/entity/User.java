@@ -83,6 +83,16 @@ public class User extends BaseEntity {
     private String email;
 
     /**
+     * 密码哈希（BCrypt 60 字符固定长度）。
+     * <p>NULL 表示用户尚未设置密码 —— 微信 / OTP 登录用户首次登录时为空，
+     * 走"账号安全 → 设置密码"才会写入。一旦设置后即可走密码登录入口。
+     * <p>BCrypt 自带盐 + 自适应成本，不需要单独 salt 列。
+     * @see com.lanprojects.fitcoach.login.config.PasswordEncoderConfig
+     */
+    @Column(name = "password_hash", length = 100)
+    private String passwordHash;
+
+    /**
      * 账号状态：true=正常, false=禁用
      */
     @Column(name = "enabled", nullable = false)

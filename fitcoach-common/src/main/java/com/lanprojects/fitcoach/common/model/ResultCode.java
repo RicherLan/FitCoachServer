@@ -89,7 +89,16 @@ public enum ResultCode {
     LOG_UPLOAD_TASK_STATUS_NOT_UPLOADING(7315, "日志任务当前状态不允许上传"),
     LOG_UPLOAD_STORAGE_ERROR(7316, "日志文件保存失败，请稍后重试"),
     LOG_TASK_EXPIRED(7321, "日志任务已过期"),
-    LOG_DOWNLOAD_IO_ERROR(7322, "日志文件读取失败");
+    LOG_DOWNLOAD_IO_ERROR(7322, "日志文件读取失败"),
+
+    // ====== 客户端密码登录 / 改密 7401-7499（fitcoach-login PasswordService） ======
+    PASSWORD_LOGIN_FAILED(7401, "手机号或密码错误"),
+    PASSWORD_FORMAT_INVALID(7402, "密码需 6-32 位且至少包含 1 个字母和 1 个数字"),
+    PASSWORD_OLD_WRONG(7403, "原密码不正确"),
+    PASSWORD_OTP_REQUIRED(7404, "首次设置密码需先验证短信验证码"),
+    PASSWORD_VERIFY_REQUIRED(7405, "请提供原密码或短信验证码以完成验证"),
+    PASSWORD_NOT_SET(7406, "尚未设置密码"),
+    PASSWORD_PHONE_REQUIRED(7407, "请先绑定手机号才能设置密码");
 
     private final int code;
     private final String message;

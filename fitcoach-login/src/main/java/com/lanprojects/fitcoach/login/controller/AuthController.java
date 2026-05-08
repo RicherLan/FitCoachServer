@@ -4,12 +4,14 @@ import com.lanprojects.fitcoach.common.exception.BusinessException;
 import com.lanprojects.fitcoach.common.model.Result;
 import com.lanprojects.fitcoach.common.model.ResultCode;
 import com.lanprojects.fitcoach.login.dto.LoginResponse;
+import com.lanprojects.fitcoach.login.dto.PasswordLoginRequest;
 import com.lanprojects.fitcoach.login.dto.PhoneLoginRequest;
 import com.lanprojects.fitcoach.login.dto.RefreshTokenRequest;
 import com.lanprojects.fitcoach.login.dto.SendCodeRequest;
 import com.lanprojects.fitcoach.login.dto.WeChatLoginRequest;
 import com.lanprojects.fitcoach.login.service.AuthService;
 import com.lanprojects.fitcoach.login.service.OtpService;
+import com.lanprojects.fitcoach.login.service.PasswordService;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
@@ -31,6 +33,7 @@ public class AuthController {
 
     private final AuthService authService;
     private final OtpService otpService;
+    private final PasswordService passwordService;
 
     /**
      * 微信登录
@@ -68,6 +71,18 @@ public class AuthController {
         otpService.verifyOtp(request.getPhone(), request.getCode());
         // 2) 校验通过 → 进入 findOrCreate + 颁 token
         return Result.success(authService.phoneLogin(request.getPhone()));
+    }
+
+    /**
+     * 手机号 + 密码登录
+     * <p>POST /api/auth/login/password
+     * <br>Body: { "phone": "13812345678", "password": "Abc123!" }
+     * <p>密码登录不会自动注册账号；用户必须先通过 OTP 登录后在"账号安全"里设置过密码。
+     * 校验失败统一回 7401 PASSWORD_LOGIN_FAILED，避免泄露"账号是否存在 / 是否设置过密码"。
+     */
+    @PostMapping("/login/password")
+    public Result<LoginResponse> passwordLogin(@Valid @RequestBody PasswordLoginRequest request) {
+        return Result.success(passwordService.login(request.getPhone(), request.getPassword()));
     }
 
     /**

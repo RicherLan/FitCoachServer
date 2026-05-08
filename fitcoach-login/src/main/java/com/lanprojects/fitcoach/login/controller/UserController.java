@@ -4,9 +4,14 @@ import com.lanprojects.fitcoach.common.exception.BusinessException;
 import com.lanprojects.fitcoach.common.model.Result;
 import com.lanprojects.fitcoach.common.model.ResultCode;
 import com.lanprojects.fitcoach.login.dto.LoginResponse;
+import com.lanprojects.fitcoach.login.dto.SetPasswordRequest;
 import com.lanprojects.fitcoach.login.dto.UpdateProfileRequest;
 import com.lanprojects.fitcoach.login.service.AuthService;
+import com.lanprojects.fitcoach.login.service.PasswordService;
 import com.lanprojects.fitcoach.login.service.UserProfileService;
+import jakarta.validation.Valid;
+
+import java.util.Map;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.web.bind.annotation.*;
@@ -29,6 +34,7 @@ public class UserController {
 
     private final AuthService authService;
     private final UserProfileService userProfileService;
+    private final PasswordService passwordService;
 
     /**
      * 获取当前用户资料 — 别名接口，方便客户端按业务划分调用，
@@ -67,6 +73,37 @@ public class UserController {
             @RequestParam("file") MultipartFile file) {
         String uid = currentUid(authorization);
         return Result.success(userProfileService.updateAvatar(uid, file));
+    }
+
+    /**
+     * 当前用户是否已设置密码 —— 客户端"账号安全"页据此区分"设置密码 / 修改密码"两种 UI 走向。
+     * <p>GET /api/user/password/exists
+     * <br>Returns: { "exists": true|false }
+     */
+    @GetMapping("/password/exists")
+    public Result<Map<String, Boolean>> passwordExists(
+            @RequestHeader(value = "Authorization", required = false) String authorization) {
+        String uid = currentUid(authorization);
+        return Result.success(Map.of("exists", passwordService.hasPassword(uid)));
+    }
+
+    /**
+     * 设置 / 修改密码（合并接口）
+     * <p>POST /api/user/password
+     * <br>Body: { "newPassword": "Abc123!", "oldPassword": "...", "otpCode": "..." }
+     * <ul>
+     *     <li>当前未设置密码 → 必须提供 otpCode（先调 /api/auth/phone/sendCode）；</li>
+     *     <li>当前已设置密码 → oldPassword 与 otpCode 二选一即可。</li>
+     * </ul>
+     * <p>密码格式 6-32 位 + 至少 1 字母 + 1 数字。
+     */
+    @PostMapping("/password")
+    public Result<Void> setOrChangePassword(
+            @RequestHeader(value = "Authorization", required = false) String authorization,
+            @Valid @RequestBody SetPasswordRequest request) {
+        String uid = currentUid(authorization);
+        passwordService.setOrChangePassword(uid, request);
+        return Result.success();
     }
 
     // ====== 辅助 ======

@@ -47,6 +47,15 @@
             <artifactId>caffeine</artifactId>
         </dependency>
 
+        <!--
+            BCrypt 密码哈希 — 仅引 spring-security-crypto 单包，不引整套 Spring Security 重武器。
+            login 模块负责暴露唯一的 BCryptPasswordEncoder Bean，admin 模块通过依赖 fitcoach-login 自动获得。
+        -->
+        <dependency>
+            <groupId>org.springframework.security</groupId>
+            <artifactId>spring-security-crypto</artifactId>
+        </dependency>
+
         <!-- 腾讯云 SDK 完整包；MockSmsService 不依赖此包的实际类型，
              纯 mock 部署时仅是磁盘多了几 MB 类，spring 不加载 TencentSmsService bean。 -->
         <dependency>

@@ -292,8 +292,8 @@ fitcoach-admin/
     │   └── AdminUserRepository         # findByUsername / existsByUsername
     ├── security/
     │   ├── AdminAuthInterceptor        # 统一鉴权拦截器
-    │   ├── AdminWebMvcConfig           # 注册拦截器 + 路径配置
-    │   └── AdminCryptoConfig           # BCryptPasswordEncoder Bean
+    │   └── AdminWebMvcConfig           # 注册拦截器 + 路径配置
+    │   # BCryptPasswordEncoder Bean 由 fitcoach-login 的 PasswordEncoderConfig 暴露，admin 直接 @Autowired
     ├── service/
     │   ├── AdminAuthService            # 登录/改密/资料
     │   ├── AdminUserService            # 用户列表/详情/启禁
@@ -342,7 +342,7 @@ fitcoach-admin/
 | 项 | 实现 |
 |----|------|
 | 密码不入日志 | `AdminAuthService.login` 失败统一报 `ADMIN_LOGIN_FAILED`，不区分账号/密码错 |
-| 密码哈希 | BCrypt strength=10（[`AdminCryptoConfig`](../src/main/java/com/lanprojects/fitcoach/admin/security/AdminCryptoConfig.java)） |
+| 密码哈希 | BCrypt strength=10（[`PasswordEncoderConfig`](../../fitcoach-login/src/main/java/com/lanprojects/fitcoach/login/config/PasswordEncoderConfig.java)，由 fitcoach-login 模块统一暴露） |
 | Token 隔离 | `type=admin_access` claim 强制隔离 user/admin token |
 | 禁用立即生效 | 每次请求 `requireAdmin` 二次查 DB |
 | 写操作权限 | VIEWER 一律拒（拦截器层） |
