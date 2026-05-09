@@ -27,6 +27,7 @@
         <module>fitcoach-exercise</module>
         <module>fitcoach-membership</module>
         <module>fitcoach-payment</module>
+        <module>fitcoach-appversion</module>
         <module>fitcoach-admin</module>
         <module>fitcoach-app</module>
     </modules>
@@ -81,6 +82,11 @@
             <dependency>
                 <groupId>com.lanprojects</groupId>
                 <artifactId>fitcoach-payment</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>com.lanprojects</groupId>
+                <artifactId>fitcoach-appversion</artifactId>
                 <version>${project.version}</version>
             </dependency>
             <dependency>

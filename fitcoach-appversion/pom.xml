@@ -1,0 +1,36 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd">
+    <modelVersion>4.0.0</modelVersion>
+
+    <parent>
+        <groupId>com.lanprojects</groupId>
+        <artifactId>fitcoach-server</artifactId>
+        <version>1.0.0-SNAPSHOT</version>
+    </parent>
+
+    <artifactId>fitcoach-appversion</artifactId>
+    <name>FitCoach App Version</name>
+    <description>
+        客户端版本管理域：app_version 表（android/ios 分平台维护版本号 + release notes + 应用商店下载链接）。
+        - App 端：GET /api/app/version/latest 同步检查更新（点击「检查更新」时调用）
+        - Admin 端：版本 CRUD + 发布/下线（接口在 fitcoach-admin 模块，复用本模块的 service/entity）
+
+        故意不放在 fitcoach-clientbus：clientbus 是"轮询型"通用通道（开机静默推），
+        本模块的检查更新走"用户主动触发的同步接口"，路径与语义都不同，分开避免概念混淆。
+    </description>
+
+    <dependencies>
+        <!-- BaseEntity / Result / BusinessException / ResultCode / ClientVersionInfo -->
+        <dependency>
+            <groupId>com.lanprojects</groupId>
+            <artifactId>fitcoach-common</artifactId>
+        </dependency>
+
+        <!--
+            App 端接口仅做"取最新版本 + 与客户端当前版本对比"，无需登录态（未登录用户也能检查更新）。
+            因此本模块刻意不依赖 fitcoach-login，避免无谓耦合。
+        -->
+    </dependencies>
+</project>

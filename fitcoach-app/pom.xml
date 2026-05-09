@@ -50,6 +50,10 @@
         </dependency>
         <dependency>
             <groupId>com.lanprojects</groupId>
+            <artifactId>fitcoach-appversion</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>com.lanprojects</groupId>
             <artifactId>fitcoach-admin</artifactId>
         </dependency>
 

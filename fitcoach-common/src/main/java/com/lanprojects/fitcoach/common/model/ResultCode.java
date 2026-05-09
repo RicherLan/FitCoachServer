@@ -134,6 +134,14 @@ public enum ResultCode {
     MUSCLE_GROUP_KEY_DUPLICATE(7602, "肌群 key 已存在，请勿重复创建", "musclegroup.key_duplicate"),
     MUSCLE_GROUP_HAS_EXERCISES(7603, "该肌群下还有动作，无法删除（请先把动作迁移到其他肌群）", "musclegroup.has_exercises"),
 
+    // ====== App 版本管理 7701-7799（fitcoach-appversion） ======
+    APP_VERSION_NOT_FOUND(7701, "版本记录不存在", "appversion.not_found"),
+    APP_VERSION_PLATFORM_INVALID(7702, "平台标识不合法（仅支持 android / ios）", "appversion.platform_invalid"),
+    APP_VERSION_DUPLICATE(7703, "该平台下已存在相同 versionCode 的版本记录", "appversion.duplicate"),
+    APP_VERSION_VERSION_CODE_INVALID(7704, "versionCode 必须为正整数", "appversion.version_code_invalid"),
+    APP_VERSION_VERSION_NAME_INVALID(7705, "versionName 不能为空", "appversion.version_name_invalid"),
+    APP_VERSION_DOWNLOAD_URL_INVALID(7706, "下载链接不能为空", "appversion.download_url_invalid"),
+
     // ====== 会员 8001-8099（fitcoach-membership） ======
     MEMBERSHIP_REQUIRED(8001, "该功能需要会员才可使用，请先开通会员", "membership.required"),
     MEMBERSHIP_PLAN_NOT_FOUND(8002, "套餐不存在或已下架", "membership.plan_not_found"),
