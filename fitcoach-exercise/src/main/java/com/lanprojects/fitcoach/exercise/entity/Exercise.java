@@ -16,7 +16,7 @@ import lombok.Setter;
  * <ul>
  *   <li>{@link #isFree} = true → 列表页打"免费体验"标签，所有用户可用；</li>
  *   <li>{@link #isFree} = false → 仅会员可用，调用动作能力时被 server 守卫拦截返回 8001 MEMBERSHIP_REQUIRED；</li>
- *   <li>由 admin 后台运营指定哪些动作免费，且每个 {@link MuscleGroup} 至少保留一个免费动作（业务规则保护，
+ *   <li>由 admin 后台运营指定哪些动作免费，且每个肌群至少保留一个免费动作（业务规则保护，
  *       违反会返回 7504 EXERCISE_LAST_FREE_IN_GROUP）。</li>
  * </ul>
  *
@@ -68,11 +68,17 @@ public class Exercise extends BaseEntity {
     private String emoji;
 
     /**
-     * 肌群分类（用于列表分组 + "每大类至少 1 个免费动作"规则）
+     * 肌群分类 key（软外键引用 {@link MuscleGroupEntity#getGroupKey()}）。
+     *
+     * <p><b>历史</b>：原来是 {@link MuscleGroup} 枚举字段（{@code @Enumerated(EnumType.STRING)}）。
+     * 现在肌群已下沉为运营可维护的实体（见 {@link MuscleGroupEntity}），
+     * 本字段改为 String 软引用——admin 创建动作时会校验这个 key 存在于 muscle_group 表中。
+     *
+     * <p>底层数据库列类型 {@code VARCHAR(32)} 不变，原有 enum 写入的字符串值（CHEST/BACK/...）天然兼容，
+     * 不需要数据迁移。
      */
     @Column(name = "muscle_group", nullable = false, length = 32)
-    @Enumerated(EnumType.STRING)
-    private MuscleGroup muscleGroup;
+    private String muscleGroup;
 
     /**
      * 客户端 CameraSetup 配置的 JSON 序列化（含建议的相机方向、距离等）。

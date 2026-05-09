@@ -1,7 +1,6 @@
 package com.lanprojects.fitcoach.config.seeder;
 
 import com.lanprojects.fitcoach.exercise.entity.Exercise;
-import com.lanprojects.fitcoach.exercise.entity.MuscleGroup;
 import com.lanprojects.fitcoach.exercise.repository.ExerciseRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -38,37 +37,37 @@ public class ExerciseSeeder implements CommandLineRunner {
     public void run(String... args) {
         int inserted = 0;
         inserted += ensure("SQUAT", "深蹲", "锻炼下肢力量的基础复合动作",
-                "股四头肌 · 臀大肌 · 腘绳肌", "🏋", MuscleGroup.LEGS, true, 10,
+                "股四头肌 · 臀大肌 · 腘绳肌", "🏋", "LEGS", true, 10,
                 cameraSetup("FRONT", 2.0, "FULL_BODY",
                         "确保从头到脚都在画面中", "手机与腰部同高效果最佳"));
         inserted += ensure("BICEP_CURL", "哑铃弯举", "针对肱二头肌的经典孤立动作",
-                "肱二头肌 · 前臂", "💪", MuscleGroup.ARMS, true, 20,
+                "肱二头肌 · 前臂", "💪", "ARMS", true, 20,
                 cameraSetup("ANGLE_45", 1.5, "UPPER_BODY",
                         "斜前方放置可以避免手臂遮挡",
                         "确保手臂弯举轨迹清晰可见",
                         "手机与胸部同高效果最佳"));
         inserted += ensure("PUSH_UP", "俯卧撑", "经典上肢推类自重训练动作",
-                "胸大肌 · 三角肌前束 · 肱三头肌", "🤸", MuscleGroup.CHEST, true, 30,
+                "胸大肌 · 三角肌前束 · 肱三头肌", "🤸", "CHEST", true, 30,
                 cameraSetup("SIDE", 2.0, "FULL_BODY",
                         "从侧面拍摄以检查身体直线性", "手机放在地面稍高位置"));
         inserted += ensure("WIDE_PUSH_UP", "宽距俯卧撑", "更强调胸大肌外侧的俯卧撑变式",
-                "胸大肌外侧 · 三角肌前束 · 肱三头肌", "🤸", MuscleGroup.CHEST, false, 31,
+                "胸大肌外侧 · 三角肌前束 · 肱三头肌", "🤸", "CHEST", false, 31,
                 cameraSetup("SIDE", 2.0, "FULL_BODY",
                         "从侧面拍摄以检查身体直线性", "双手间距约为肩宽的 1.5 倍"));
         inserted += ensure("LUNGE", "弓步蹲", "锻炼单侧腿部力量与平衡性的复合动作",
-                "股四头肌 · 臀大肌 · 腘绳肌", "🦿", MuscleGroup.LEGS, false, 11,
+                "股四头肌 · 臀大肌 · 腘绳肌", "🦿", "LEGS", false, 11,
                 cameraSetup("SIDE", 2.0, "FULL_BODY",
                         "侧面拍摄以检测膝盖角度", "确保从头到脚都在画面中"));
         inserted += ensure("LATERAL_RAISE", "侧平举", "针对三角肌中束的经典孤立动作",
-                "三角肌中束", "🙌", MuscleGroup.SHOULDERS, true, 40,
+                "三角肌中束", "🙌", "SHOULDERS", true, 40,
                 cameraSetup("FRONT", 1.8, "UPPER_BODY",
                         "正面拍摄以检查手臂抬起高度", "确保双臂完整可见"));
         inserted += ensure("BENT_OVER_ROW", "俯身划船", "针对背阔肌的经典复合拉类动作",
-                "背阔肌 · 菱形肌 · 肱二头肌", "🚣", MuscleGroup.BACK, true, 50,
+                "背阔肌 · 菱形肌 · 肱二头肌", "🚣", "BACK", true, 50,
                 cameraSetup("SIDE", 2.0, "FULL_BODY",
                         "侧面拍摄以检查俯身角度", "确保上半身和手臂轨迹清晰可见"));
         inserted += ensure("OVERHEAD_TRICEP_EXTENSION", "过头臂屈伸", "针对肱三头肌的孤立训练动作",
-                "肱三头肌", "💪", MuscleGroup.ARMS, false, 21,
+                "肱三头肌", "💪", "ARMS", false, 21,
                 cameraSetup("SIDE", 1.5, "UPPER_BODY",
                         "侧面拍摄以检查肘部轨迹", "确保手臂完整可见"));
 
@@ -78,7 +77,7 @@ public class ExerciseSeeder implements CommandLineRunner {
     }
 
     private int ensure(String key, String displayName, String description,
-                       String muscles, String emoji, MuscleGroup group, boolean isFree,
+                       String muscles, String emoji, String groupKey, boolean isFree,
                        int sortOrder, String cameraJson) {
         if (exerciseRepository.findByExerciseKey(key).isPresent()) {
             return 0;
@@ -89,14 +88,14 @@ public class ExerciseSeeder implements CommandLineRunner {
         e.setDescription(description);
         e.setMuscles(muscles);
         e.setEmoji(emoji);
-        e.setMuscleGroup(group);
+        e.setMuscleGroup(groupKey);
         e.setIsFree(isFree);
         e.setSortOrder(sortOrder);
         e.setEnabled(true);
         e.setCameraSetupJson(cameraJson);
         exerciseRepository.save(e);
         log.info("[seeder] 创建动作：{} ({}) {} {}",
-                displayName, key, group, isFree ? "[免费]" : "[付费]");
+                displayName, key, groupKey, isFree ? "[免费]" : "[付费]");
         return 1;
     }
 

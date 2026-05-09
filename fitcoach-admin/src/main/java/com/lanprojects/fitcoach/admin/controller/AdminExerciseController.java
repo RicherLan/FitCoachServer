@@ -11,7 +11,15 @@ import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.validation.annotation.Validated;
-import org.springframework.web.bind.annotation.*;
+import org.springframework.web.bind.annotation.DeleteMapping;
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PatchMapping;
+import org.springframework.web.bind.annotation.PathVariable;
+import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.RequestBody;
+import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
+import org.springframework.web.bind.annotation.RestController;
 
 import java.util.List;
 
@@ -26,6 +34,7 @@ import java.util.List;
  *   <li>{@code PATCH /{id}} —— 更新（PATCH 语义：null = 不动）</li>
  *   <li>{@code POST /{id}/toggle-free?value=true|false} —— 切换免费/付费</li>
  *   <li>{@code POST /{id}/toggle-enabled?value=true|false} —— 启用/禁用</li>
+ *   <li>{@code DELETE /{id}} —— 硬删除（同样受"每肌群至少 1 个免费动作"规则保护）</li>
  * </ul>
  *
  * <p>"每个肌群至少保留一个免费动作"的保护规则由
@@ -105,5 +114,14 @@ public class AdminExerciseController {
         Exercise updated = exerciseService.update(id, patch);
         log.info("[admin] {} 切换动作 id={} 启用状态 → {}", operator, id, value);
         return Result.success(AdminExerciseDto.from(updated));
+    }
+
+    /** 删除动作（同样受"每肌群至少 1 个免费动作"规则保护，违反返回 7504） */
+    @DeleteMapping("/{id}")
+    public Result<Void> delete(HttpServletRequest request, @PathVariable("id") Long id) {
+        String operator = (String) request.getAttribute(AdminAuthInterceptor.ATTR_ADMIN_USERNAME);
+        exerciseService.delete(id);
+        log.info("[admin] {} 删除动作 id={}", operator, id);
+        return Result.success(null);
     }
 }

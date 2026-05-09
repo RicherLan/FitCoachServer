@@ -115,6 +115,11 @@ public enum ResultCode {
     EXERCISE_DISABLED(7503, "该动作已下架"),
     EXERCISE_LAST_FREE_IN_GROUP(7504, "该肌群至少需保留一个免费动作，无法将其下线/置为付费"),
 
+    // ====== 肌群 7601-7699（fitcoach-exercise · MuscleGroup） ======
+    MUSCLE_GROUP_NOT_FOUND(7601, "肌群不存在"),
+    MUSCLE_GROUP_KEY_DUPLICATE(7602, "肌群 key 已存在，请勿重复创建"),
+    MUSCLE_GROUP_HAS_EXERCISES(7603, "该肌群下还有动作，无法删除（请先把动作迁移到其他肌群）"),
+
     // ====== 会员 8001-8099（fitcoach-membership） ======
     MEMBERSHIP_REQUIRED(8001, "该功能需要会员才可使用，请先开通会员"),
     MEMBERSHIP_PLAN_NOT_FOUND(8002, "套餐不存在或已下架"),

@@ -1,7 +1,6 @@
 package com.lanprojects.fitcoach.exercise.dto;
 
 import com.lanprojects.fitcoach.exercise.entity.Exercise;
-import com.lanprojects.fitcoach.exercise.entity.MuscleGroup;
 import lombok.Builder;
 import lombok.Data;
 
@@ -35,7 +34,7 @@ public class ExerciseDTO {
     /** 表情符号 */
     private String emoji;
 
-    /** 肌群分类，例："CHEST" / "LEGS"，与 RN 端 MuscleGroup 枚举对齐 */
+    /** 肌群 groupKey，例："CHEST" / "LEGS"。客户端用此值与 muscle_group 列表数据做映射展示 */
     private String muscleGroup;
 
     /** 客户端 CameraSetup JSON（透传，server 不解析） */
@@ -45,14 +44,13 @@ public class ExerciseDTO {
     private Boolean isFree;
 
     public static ExerciseDTO from(Exercise e) {
-        MuscleGroup g = e.getMuscleGroup();
         return ExerciseDTO.builder()
                 .exerciseKey(e.getExerciseKey())
                 .displayName(e.getDisplayName())
                 .description(e.getDescription())
                 .muscles(e.getMuscles())
                 .emoji(e.getEmoji())
-                .muscleGroup(g != null ? g.name() : null)
+                .muscleGroup(e.getMuscleGroup())
                 .cameraSetupJson(e.getCameraSetupJson())
                 .isFree(Boolean.TRUE.equals(e.getIsFree()))
                 .build();

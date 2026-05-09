@@ -1,9 +1,7 @@
 package com.lanprojects.fitcoach.admin.dto.exercise;
 
 import com.lanprojects.fitcoach.exercise.entity.Exercise;
-import com.lanprojects.fitcoach.exercise.entity.MuscleGroup;
 import jakarta.validation.constraints.NotBlank;
-import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Pattern;
 import lombok.Data;
 
@@ -36,8 +34,15 @@ public class AdminExerciseRequest {
 
     private String emoji;
 
-    @NotNull(groups = OnCreate.class)
-    private MuscleGroup muscleGroup;
+    /**
+     * 肌群 groupKey（如 "CHEST"）。必须先在 admin 后台维护好对应肌群（{@code /api/admin/muscle-groups}），
+     * 否则 ExerciseService.create/update 会返回 7601 MUSCLE_GROUP_NOT_FOUND。
+     */
+    @NotBlank(groups = OnCreate.class)
+    @Pattern(regexp = "^[A-Z][A-Z0-9_]{1,31}$",
+            message = "muscleGroup 必须是大写字母开头、含大写字母/数字/下划线、长度 2-32",
+            groups = {OnCreate.class})
+    private String muscleGroup;
 
     /** RN 端 CameraSetup 的 JSON 字符串（透传，server 不解析） */
     private String cameraSetupJson;

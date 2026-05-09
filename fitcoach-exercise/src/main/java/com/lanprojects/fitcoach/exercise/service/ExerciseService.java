@@ -4,6 +4,7 @@ import com.lanprojects.fitcoach.common.exception.BusinessException;
 import com.lanprojects.fitcoach.common.model.ResultCode;
 import com.lanprojects.fitcoach.exercise.entity.Exercise;
 import com.lanprojects.fitcoach.exercise.repository.ExerciseRepository;
+import com.lanprojects.fitcoach.exercise.repository.MuscleGroupRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
@@ -23,6 +24,7 @@ import java.util.List;
 public class ExerciseService {
 
     private final ExerciseRepository exerciseRepository;
+    private final MuscleGroupRepository muscleGroupRepository;
 
     // ====== 查询 ======
 
@@ -72,12 +74,20 @@ public class ExerciseService {
     // ====== Admin 写操作 ======
 
     /**
-     * 创建新动作。会校验 exerciseKey 唯一性。
+     * 创建新动作。会校验：
+     * <ul>
+     *   <li>exerciseKey 唯一；</li>
+     *   <li>muscleGroup 存在于 muscle_group 表（admin 不能引用未配置的肌群）。</li>
+     * </ul>
      */
     public Exercise create(Exercise toCreate) {
         exerciseRepository.findByExerciseKey(toCreate.getExerciseKey()).ifPresent(e -> {
             throw new BusinessException(ResultCode.EXERCISE_KEY_DUPLICATE);
         });
+        // 校验 muscleGroup 引用有效
+        if (toCreate.getMuscleGroup() == null || !muscleGroupRepository.existsByGroupKey(toCreate.getMuscleGroup())) {
+            throw new BusinessException(ResultCode.MUSCLE_GROUP_NOT_FOUND);
+        }
         // 强制 id 走数据库自增
         toCreate.setId(null);
         Exercise saved = exerciseRepository.save(toCreate);
@@ -116,7 +126,12 @@ public class ExerciseService {
         if (patch.getDescription() != null) existing.setDescription(patch.getDescription());
         if (patch.getMuscles() != null) existing.setMuscles(patch.getMuscles());
         if (patch.getEmoji() != null) existing.setEmoji(patch.getEmoji());
-        if (patch.getMuscleGroup() != null) existing.setMuscleGroup(patch.getMuscleGroup());
+        if (patch.getMuscleGroup() != null) {
+            if (!muscleGroupRepository.existsByGroupKey(patch.getMuscleGroup())) {
+                throw new BusinessException(ResultCode.MUSCLE_GROUP_NOT_FOUND);
+            }
+            existing.setMuscleGroup(patch.getMuscleGroup());
+        }
         if (patch.getCameraSetupJson() != null) existing.setCameraSetupJson(patch.getCameraSetupJson());
         if (patch.getIsFree() != null) existing.setIsFree(patch.getIsFree());
         if (patch.getSortOrder() != null) existing.setSortOrder(patch.getSortOrder());
@@ -126,5 +141,27 @@ public class ExerciseService {
         log.info("[exercise] 更新动作 id={} key={} isFree={} enabled={}",
                 saved.getId(), saved.getExerciseKey(), saved.getIsFree(), saved.getEnabled());
         return saved;
+    }
+
+    /**
+     * 删除动作（硬删除）。
+     *
+     * <p>当前 Exercise 没有外键被其他实体引用（统计/会话表都使用 exerciseKey 字符串而非 FK），
+     * 因此可直接删。常规运营建议用 enabled=false 软下架，删除仅用于"该 key 完全不要了"的场景。
+     *
+     * <p><b>保护规则</b>：被删动作如果是其所在肌群的最后一个免费动作，会触发
+     * {@link ResultCode#EXERCISE_LAST_FREE_IN_GROUP}（与 update 设 isFree=false 行为一致）。
+     */
+    public void delete(Long id) {
+        Exercise existing = findById(id);
+        if (Boolean.TRUE.equals(existing.getIsFree()) && Boolean.TRUE.equals(existing.getEnabled())) {
+            long otherFree = exerciseRepository.countOtherFreeInGroup(existing.getMuscleGroup(), id);
+            if (otherFree == 0) {
+                throw new BusinessException(ResultCode.EXERCISE_LAST_FREE_IN_GROUP);
+            }
+        }
+        exerciseRepository.delete(existing);
+        log.info("[exercise] 删除动作 id={} key={} muscleGroup={}",
+                id, existing.getExerciseKey(), existing.getMuscleGroup());
     }
 }
