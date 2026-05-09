@@ -15,6 +15,10 @@ package com.lanprojects.fitcoach.common.client;
  *   <li><b>deviceId</b>：设备唯一标识。RN 客户端首次安装生成 UUIDv4 持久化到 AsyncStorage，
  *       后续启动复用。卸载重装会得到新 ID（这是预期：不依赖 IMEI/Android-ID/IDFA 避免隐私敏感字段）。
  *       业务用途：单设备登录互踢、按设备维度审计、风控。</li>
+ *   <li><b>lang</b>：客户端当前界面语言（BCP-47），如 "zh-CN" / "en" / "fr" / "ja"。
+ *       由 RN 端 i18n store 决定（用户手动切换 &gt; 系统语言 &gt; 默认 zh-CN），逐请求上报。
+ *       业务用途：错误提示 / toast / 邮件等"对客户端可见的文案"按此语言翻译后下发。
+ *       缺失/不识别时回落到 zh-CN（见 {@link ClientContext#locale()}）。</li>
  * </ul>
  *
  * <p><b>编码规则</b>：versionCode = MAJOR*1_000_000 + MINOR*1_000 + PATCH（每段 0-999）。
@@ -35,13 +39,14 @@ public record ClientVersionInfo(
         String nativeVersionName,  // "1.2.3" / null
         int bundleVersionCode,     // 0 = unknown
         String bundleVersionName,  // "1.2.3" / null
-        String deviceId            // RN 端 UUIDv4 / "unknown" / null
+        String deviceId,           // RN 端 UUIDv4 / "unknown" / null
+        String lang                // BCP-47 语言标签，如 "zh-CN" / "en" / null
 ) {
 
     /** 客户端启动早期 deviceIdProvider 未就绪窗口里上报的占位值，与 RN 端常量保持一致 */
     public static final String UNKNOWN_DEVICE_ID = "unknown";
 
-    public static final ClientVersionInfo EMPTY = new ClientVersionInfo(null, 0, null, 0, null, null);
+    public static final ClientVersionInfo EMPTY = new ClientVersionInfo(null, 0, null, 0, null, null, null);
 
     /** 是否完全没有客户端信息（admin 后台 / Postman / 老版本无埋点客户端 都会落到这里） */
     public boolean isEmpty() {

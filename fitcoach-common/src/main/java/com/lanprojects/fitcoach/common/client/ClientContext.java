@@ -1,5 +1,7 @@
 package com.lanprojects.fitcoach.common.client;
 
+import java.util.Locale;
+
 /**
  * 客户端上下文 — ThreadLocal 持有当前请求的 {@link ClientVersionInfo}，
  * 业务任意位置可通过静态方法读取，无需把 HttpServletRequest 一路下传。
@@ -84,5 +86,36 @@ public final class ClientContext {
      */
     public static String deviceId() {
         return get().deviceId();
+    }
+
+    /**
+     * 当前请求的客户端界面语言（BCP-47 标签，如 "zh-CN" / "en" / "fr"）。
+     * <p>缺失时返回 null（admin 后台 / Postman / 老版本未上报客户端）。
+     * <p>需要"语言对应的 Locale 对象"做 i18n 时请用 {@link #locale()}，已自动兜底。
+     */
+    public static String lang() {
+        return get().lang();
+    }
+
+    /**
+     * 当前请求的客户端语言对应的 {@link Locale}，用于 Spring MessageSource 翻译。
+     * <p><b>兜底链</b>：lang 为空 / 解析失败 → {@code Locale.SIMPLIFIED_CHINESE}（zh_CN）。
+     * 选中文做兜底是因为本项目主要受众是中文用户，admin 后台 / 调试请求都期望看到中文。
+     */
+    public static Locale locale() {
+        String tag = lang();
+        if (tag == null || tag.isBlank()) {
+            return Locale.SIMPLIFIED_CHINESE;
+        }
+        try {
+            Locale parsed = Locale.forLanguageTag(tag);
+            // forLanguageTag 对完全无法解析的字符串返回 ROOT (空 Locale)，这里也按兜底处理
+            if (parsed.getLanguage().isBlank()) {
+                return Locale.SIMPLIFIED_CHINESE;
+            }
+            return parsed;
+        } catch (Exception e) {
+            return Locale.SIMPLIFIED_CHINESE;
+        }
     }
 }

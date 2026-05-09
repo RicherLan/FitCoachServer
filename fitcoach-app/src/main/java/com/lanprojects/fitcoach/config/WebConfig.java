@@ -50,13 +50,14 @@ public class WebConfig implements WebMvcConfigurer {
                         "Accept-Language",
                         "Cache-Control",
                         "X-Requested-With",
-                        // 客户端版本/设备六件套（与 RN httpClient.ts / ClientInfoInterceptor 严格对齐）
+                        // 客户端版本/设备六件套 + 语言（与 RN httpClient.ts / ClientInfoInterceptor 严格对齐）
                         ClientInfoInterceptor.HDR_PLATFORM,
                         ClientInfoInterceptor.HDR_NATIVE_VERSION_CODE,
                         ClientInfoInterceptor.HDR_NATIVE_VERSION_NAME,
                         ClientInfoInterceptor.HDR_BUNDLE_VERSION_CODE,
                         ClientInfoInterceptor.HDR_BUNDLE_VERSION_NAME,
-                        ClientInfoInterceptor.HDR_DEVICE_ID
+                        ClientInfoInterceptor.HDR_DEVICE_ID,
+                        ClientInfoInterceptor.HDR_LANG
                 )
                 .exposedHeaders("Authorization")
                 .allowCredentials(true)

@@ -17,6 +17,7 @@ import org.springframework.web.servlet.HandlerInterceptor;
  *   <li>{@link #HDR_BUNDLE_VERSION_CODE} — int，OTA 后会与 native 不同</li>
  *   <li>{@link #HDR_BUNDLE_VERSION_NAME} — string</li>
  *   <li>{@link #HDR_DEVICE_ID}           — string，RN 端 UUIDv4 / "unknown" / 缺失</li>
+ *   <li>{@link #HDR_LANG}                — string，BCP-47 语言标签（"zh-CN" / "en" / "fr" / ...），用于 i18n</li>
  * </ul>
  *
  * <p><b>缺失/格式错误兜底</b>：
@@ -44,6 +45,8 @@ public class ClientInfoInterceptor implements HandlerInterceptor {
     public static final String HDR_BUNDLE_VERSION_CODE = "X-Client-Bundle-Version-Code";
     public static final String HDR_BUNDLE_VERSION_NAME = "X-Client-Bundle-Version-Name";
     public static final String HDR_DEVICE_ID = "X-Device-Id";
+    /** 客户端当前界面语言（BCP-47），用于 i18n 翻译错误提示等对客户端可见的文案 */
+    public static final String HDR_LANG = "X-Client-Lang";
 
     @Override
     public boolean preHandle(HttpServletRequest request, HttpServletResponse response, Object handler) {
@@ -53,15 +56,16 @@ public class ClientInfoInterceptor implements HandlerInterceptor {
         int bundleCode = parseIntSafe(request.getHeader(HDR_BUNDLE_VERSION_CODE));
         String bundleName = trimToNull(request.getHeader(HDR_BUNDLE_VERSION_NAME));
         String deviceId = trimToNull(request.getHeader(HDR_DEVICE_ID));
+        String lang = trimToNull(request.getHeader(HDR_LANG));
 
         ClientVersionInfo info = new ClientVersionInfo(
-                platform, nativeCode, nativeName, bundleCode, bundleName, deviceId);
+                platform, nativeCode, nativeName, bundleCode, bundleName, deviceId, lang);
         ClientContext.set(info);
 
         // DEBUG 级日志：avoid 生产刷屏；排错时调到 DEBUG 即可看到每个请求的客户端信息
         if (log.isDebugEnabled() && !info.isEmpty()) {
-            log.debug("client: platform={} native={}({}) bundle={}({}) device={} uri={}",
-                    platform, nativeName, nativeCode, bundleName, bundleCode, deviceId, request.getRequestURI());
+            log.debug("client: platform={} native={}({}) bundle={}({}) device={} lang={} uri={}",
+                    platform, nativeName, nativeCode, bundleName, bundleCode, deviceId, lang, request.getRequestURI());
         }
         return true;
     }

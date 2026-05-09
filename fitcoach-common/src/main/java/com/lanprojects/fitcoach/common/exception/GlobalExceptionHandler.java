@@ -1,7 +1,9 @@
 package com.lanprojects.fitcoach.common.exception;
 
+import com.lanprojects.fitcoach.common.i18n.I18nMessages;
 import com.lanprojects.fitcoach.common.model.Result;
 import com.lanprojects.fitcoach.common.model.ResultCode;
+import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.HttpStatus;
 import org.springframework.validation.BindException;
@@ -13,33 +15,48 @@ import org.springframework.web.multipart.MaxUploadSizeExceededException;
 
 /**
  * 全局异常处理器
+ *
+ * <p><b>i18n 策略</b>：所有错误码的 message 在拼装 Result 之前统一通过
+ * {@link I18nMessages#translate(ResultCode)} 按
+ * {@link com.lanprojects.fitcoach.common.client.ClientContext#locale()} 翻译为客户端语言；
+ * 拦截器未注册（admin / 调试请求）时 Locale 自动落回 zh_CN。
+ *
+ * <p>对 {@code BusinessException} 持有自定义 message（i18nKey=null）的旧用法直接透传，不再翻译，
+ * 保持向后兼容。
  */
 @Slf4j
 @RestControllerAdvice
+@RequiredArgsConstructor
 public class GlobalExceptionHandler {
 
+    private final I18nMessages i18nMessages;
+
     /**
-     * 业务异常
+     * 业务异常：优先按 i18nKey + args 翻译，缺失时回落到异常自带的 message（即 ResultCode 的 zh-CN 兜底）。
      */
     @ExceptionHandler(BusinessException.class)
     @ResponseStatus(HttpStatus.OK)
     public Result<?> handleBusinessException(BusinessException e) {
-        log.warn("业务异常: code={}, message={}", e.getCode(), e.getMessage());
-        return Result.error(e.getCode(), e.getMessage());
+        String message = (e.getI18nKey() != null)
+                ? i18nMessages.translate(e.getI18nKey(), e.getArgs(), com.lanprojects.fitcoach.common.client.ClientContext.locale(), e.getMessage())
+                : e.getMessage();
+        log.warn("业务异常: code={}, i18nKey={}, message={}", e.getCode(), e.getI18nKey(), message);
+        return Result.error(e.getCode(), message);
     }
 
     /**
-     * 参数校验异常（@Valid + @RequestBody）
+     * 参数校验异常（@Valid + @RequestBody）。
+     * <p>错误信息含字段名 + 校验注解 message，前缀走 i18n（{@code error.bad_request}）。
      */
     @ExceptionHandler(MethodArgumentNotValidException.class)
     @ResponseStatus(HttpStatus.BAD_REQUEST)
     public Result<?> handleValidationException(MethodArgumentNotValidException e) {
-        String message = e.getBindingResult().getFieldErrors().stream()
+        String detail = e.getBindingResult().getFieldErrors().stream()
                 .findFirst()
                 .map(error -> error.getField() + ": " + error.getDefaultMessage())
-                .orElse("参数校验失败");
-        log.warn("参数校验失败: {}", message);
-        return Result.error(ResultCode.BAD_REQUEST, message);
+                .orElse(i18nMessages.translate(ResultCode.BAD_REQUEST));
+        log.warn("参数校验失败: {}", detail);
+        return Result.error(ResultCode.BAD_REQUEST.getCode(), detail);
     }
 
     /**
@@ -48,12 +65,12 @@ public class GlobalExceptionHandler {
     @ExceptionHandler(BindException.class)
     @ResponseStatus(HttpStatus.BAD_REQUEST)
     public Result<?> handleBindException(BindException e) {
-        String message = e.getFieldErrors().stream()
+        String detail = e.getFieldErrors().stream()
                 .findFirst()
                 .map(error -> error.getField() + ": " + error.getDefaultMessage())
-                .orElse("参数绑定失败");
-        log.warn("参数绑定失败: {}", message);
-        return Result.error(ResultCode.BAD_REQUEST, message);
+                .orElse(i18nMessages.translate(ResultCode.BAD_REQUEST));
+        log.warn("参数绑定失败: {}", detail);
+        return Result.error(ResultCode.BAD_REQUEST.getCode(), detail);
     }
 
     /**
@@ -66,7 +83,8 @@ public class GlobalExceptionHandler {
     @ResponseStatus(HttpStatus.OK)
     public Result<?> handleMaxUploadSize(MaxUploadSizeExceededException e) {
         log.warn("上传文件超过 multipart 限制: {}", e.getMessage());
-        return Result.error(ResultCode.UPLOAD_FILE_TOO_LARGE);
+        return Result.error(ResultCode.UPLOAD_FILE_TOO_LARGE.getCode(),
+                i18nMessages.translate(ResultCode.UPLOAD_FILE_TOO_LARGE));
     }
 
     /**
@@ -82,6 +100,7 @@ public class GlobalExceptionHandler {
         if (log.isDebugEnabled()) {
             log.debug("未知异常堆栈", e);
         }
-        return Result.error(ResultCode.ERROR);
+        return Result.error(ResultCode.ERROR.getCode(),
+                i18nMessages.translate(ResultCode.ERROR));
     }
 }
