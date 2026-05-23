@@ -94,6 +94,14 @@ otp:
   max-per-hour-per-ip: 20            # 同一 IP 1 小时最多发 20 条
   max-verify-attempts: 5             # 单条 OTP 最多校验 5 次错误后立即作废
 
+# ====== 腾讯行为验证码（CAPTCHA） ======
+# enabled=false → 跳过校验（本地开发默认关闭，生产打开）
+# app-id / app-secret-key → 腾讯云验证码控制台获取
+captcha:
+  enabled: ${CAPTCHA_ENABLED:false}
+  app-id: ${CAPTCHA_APP_ID:199923205}
+  app-secret-key: ${CAPTCHA_APP_SECRET_KEY:oCscE3Kf2mIvFLrJhgEHC7Qss}
+
 # ====== 后台管理（fitcoach-admin） ======
 # 管理员 token 过期时间默认 8h（比客户端 access token 2h 更长 —— 后台操作场景一次登录工作半天）。
 # 该配置存放在 sys_config.admin.token_expire_hours，本文件不直接配置；

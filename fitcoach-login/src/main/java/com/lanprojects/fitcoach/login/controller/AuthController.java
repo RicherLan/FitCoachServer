@@ -10,6 +10,7 @@ import com.lanprojects.fitcoach.login.dto.RefreshTokenRequest;
 import com.lanprojects.fitcoach.login.dto.SendCodeRequest;
 import com.lanprojects.fitcoach.login.dto.WeChatLoginRequest;
 import com.lanprojects.fitcoach.login.service.AuthService;
+import com.lanprojects.fitcoach.login.service.CaptchaService;
 import com.lanprojects.fitcoach.login.service.OtpService;
 import com.lanprojects.fitcoach.login.service.PasswordService;
 import jakarta.servlet.http.HttpServletRequest;
@@ -32,6 +33,7 @@ public class AuthController {
     private static final String BEARER_PREFIX = "Bearer ";
 
     private final AuthService authService;
+    private final CaptchaService captchaService;
     private final OtpService otpService;
     private final PasswordService passwordService;
 
@@ -48,14 +50,19 @@ public class AuthController {
     /**
      * 发送手机号验证码
      * <p>POST /api/auth/phone/sendCode
-     * <br>Body: { "phone": "13812345678", "scene": "LOGIN" }
+     * <br>Body: { "phone": "13812345678", "scene": "LOGIN", "captchaTicket": "...", "captchaRandstr": "..." }
+     * <p>流程：先校验腾讯行为验证码 → 再走 OtpService 频控 + 发送。
      * <p>OtpService 内部已做：60s 重发冷却 / 1h 单号上限 / IP 限频 / OTP 失败次数。
      */
     @PostMapping("/phone/sendCode")
     public Result<Void> sendPhoneCode(
             @Valid @RequestBody SendCodeRequest request,
             HttpServletRequest httpRequest) {
-        otpService.requestOtp(request.getPhone(), getClientIp(httpRequest));
+        String clientIp = getClientIp(httpRequest);
+        // 先校验人机验证码（captcha.enabled=false 时自动跳过）
+        captchaService.verify(request.getCaptchaTicket(), request.getCaptchaRandstr(), clientIp);
+        // 验证通过 → 发送 OTP
+        otpService.requestOtp(request.getPhone(), clientIp);
         return Result.success();
     }
 

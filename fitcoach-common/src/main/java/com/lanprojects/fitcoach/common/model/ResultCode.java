@@ -59,6 +59,8 @@ public enum ResultCode {
     OTP_INVALID(4004, "验证码错误或已过期", "otp.invalid"),
     OTP_VERIFY_LIMIT_EXCEEDED(4005, "验证码错误次数过多，请重新获取", "otp.verify_limit_exceeded"),
     SMS_PROVIDER_ERROR(4006, "短信服务暂不可用，请稍后重试", "otp.sms_provider_error"),
+    CAPTCHA_VERIFY_FAILED(4007, "人机验证未通过，请重试", "captcha.verify_failed"),
+    CAPTCHA_SERVICE_ERROR(4008, "人机验证服务暂不可用，请稍后重试", "captcha.service_error"),
 
     // ====== 用户资料 / 文件上传 5xxx ======
     NICKNAME_INVALID(5001, "昵称长度需在 2-20 之间，且不能仅含空白字符", "profile.nickname_invalid"),
