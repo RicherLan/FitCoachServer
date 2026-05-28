@@ -35,5 +35,11 @@
             payment 不依赖 membership：保持模块单向依赖
             membership 通过 @EventListener(PaymentSucceededEvent) 单向监听
         -->
+
+        <!-- hutool-http：微信支付 V3 接口调用（项目已在 login 模块使用，保持一致） -->
+        <dependency>
+            <groupId>cn.hutool</groupId>
+            <artifactId>hutool-http</artifactId>
+        </dependency>
     </dependencies>
 </project>

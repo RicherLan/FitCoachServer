@@ -31,6 +31,8 @@ public final class PaymentConfigKeys {
     public static final String WECHAT_MCH_SERIAL_NO = "payment.wechat.mchSerialNo";
     /** 微信支付回调 URL（外部可访问域名） */
     public static final String WECHAT_NOTIFY_URL = "payment.wechat.notifyUrl";
+    /** 商户 API 私钥（PEM 格式，加密存储） */
+    public static final String WECHAT_MCH_PRIVATE_KEY = "payment.wechat.mchPrivateKey";
 
     // ====== Apple IAP ======
 

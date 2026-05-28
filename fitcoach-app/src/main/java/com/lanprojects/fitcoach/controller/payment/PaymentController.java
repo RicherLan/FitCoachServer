@@ -9,6 +9,7 @@ import com.lanprojects.fitcoach.login.support.AuthSupport;
 import com.lanprojects.fitcoach.membership.entity.MembershipPlan;
 import com.lanprojects.fitcoach.membership.service.MembershipService;
 import com.lanprojects.fitcoach.payment.entity.PaymentOrder;
+import com.lanprojects.fitcoach.payment.provider.wechat.WeChatCallbackHandler;
 import com.lanprojects.fitcoach.payment.service.CreateOrderCommand;
 import com.lanprojects.fitcoach.payment.service.PaymentService;
 import com.lanprojects.fitcoach.payment.service.PlanSnapshot;
@@ -44,6 +45,7 @@ public class PaymentController {
 
     private final MembershipService membershipService;
     private final PaymentService paymentService;
+    private final WeChatCallbackHandler weChatCallbackHandler;
     private final AuthSupport auth;
 
     // ====== 创建订单 ======
@@ -157,19 +159,38 @@ public class PaymentController {
     }
 
     /**
-     * 微信支付 V3 回调（占位 — 实际签名校验和 AES 解密在 WeChatPaymentProvider 完成商户号配置后实现）。
+     * 微信支付 V3 回调 — 签名校验 + AES-256-GCM 解密 + 标记订单支付成功。
      *
-     * <p>当前阶段直接返回 wechat 期望的成功 ack，便于前期接入测试不报警；真正的事务在落地商户号后开发。
+     * <p><b>安全措施</b>：
+     * <ul>
+     *   <li>Wechatpay-Signature 签名校验（MVP 阶段先跳过，生产环境需配置微信平台证书）；</li>
+     *   <li>AES-256-GCM 对称解密 resource 数据（apiV3Key 作为密钥）；</li>
+     *   <li>markPaid 内部幂等（重复调用安全）。</li>
+     * </ul>
+     *
+     * <p><b>返回值</b>：直接返回 {@code Map}（不包 {@code Result}），
+     * 因为微信要求的格式是 {@code {"code":"SUCCESS","message":"OK"}}，不是本系统的标准包装。
+     *
+     * @see <a href="https://pay.weixin.qq.com/docs/merchant/apis/in-app-payment/payment-notice.html">
+     *     微信支付 V3 回调通知文档</a>
      */
     @PostMapping("/notify/wechat")
-    public Map<String, String> wechatNotify(@RequestBody(required = false) String body) {
-        // TODO[wechat-pay]: 商户号到位后实现：
-        // 1. 校验 Wechatpay-Signature / Wechatpay-Timestamp / Wechatpay-Nonce / Wechatpay-Serial
-        // 2. AES-GCM 解密 body 拿 transaction_id + out_trade_no
-        // 3. paymentService.markPaid(out_trade_no, prepayId, transactionId)
-        log.warn("[payment] 收到微信回调（当前未实现签名校验，仅返回 ack 占位） bodyLen={}",
-                body == null ? 0 : body.length());
-        return Map.of("code", "SUCCESS", "message", "OK");
+    public Map<String, String> wechatNotify(
+            @RequestHeader(value = "Wechatpay-Timestamp", required = false) String timestamp,
+            @RequestHeader(value = "Wechatpay-Nonce", required = false) String nonce,
+            @RequestHeader(value = "Wechatpay-Signature", required = false) String signature,
+            @RequestHeader(value = "Wechatpay-Serial", required = false) String serial,
+            @RequestBody(required = false) String body) {
+
+        boolean success = weChatCallbackHandler.handleCallback(
+                timestamp, nonce, signature, serial, body);
+
+        if (success) {
+            return Map.of("code", "SUCCESS", "message", "OK");
+        } else {
+            // 返回 FAIL 让微信重试（微信会按策略重试最多 15 次）
+            return Map.of("code", "FAIL", "message", "处理失败，请重试");
+        }
     }
 
     // ====== 内部 ======

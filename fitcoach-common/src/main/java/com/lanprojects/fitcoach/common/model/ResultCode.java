@@ -144,6 +144,9 @@ public enum ResultCode {
     APP_VERSION_VERSION_NAME_INVALID(7705, "versionName 不能为空", "appversion.version_name_invalid"),
     APP_VERSION_DOWNLOAD_URL_INVALID(7706, "下载链接不能为空", "appversion.download_url_invalid"),
 
+    // ====== 系统配置 7801-7899（fitcoach-admin · SysConfig） ======
+    SYS_CONFIG_NOT_FOUND(7801, "配置项不存在", "admin.config_not_found"),
+
     // ====== 会员 8001-8099（fitcoach-membership） ======
     MEMBERSHIP_REQUIRED(8001, "该功能需要会员才可使用，请先开通会员", "membership.required"),
     MEMBERSHIP_PLAN_NOT_FOUND(8002, "套餐不存在或已下架", "membership.plan_not_found"),

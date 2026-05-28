@@ -58,6 +58,9 @@ public class PaymentConfigSeeder implements CommandLineRunner {
         inserted += ensureExists(new SysConfig(
                 PaymentConfigKeys.WECHAT_NOTIFY_URL, "", "payment",
                 "微信支付回调 URL（外网可达，HTTPS）"));
+        inserted += ensureExists(new SysConfig(
+                PaymentConfigKeys.WECHAT_MCH_PRIVATE_KEY, configCryptoService.encrypt(""), "payment",
+                "微信支付商户 API 私钥（PEM 格式，加密存储）", true));
 
         // Apple IAP — 默认全部空，等申请到苹果开发者账号
         inserted += ensureExists(new SysConfig(
