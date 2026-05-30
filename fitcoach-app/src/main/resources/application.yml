@@ -18,6 +18,13 @@ spring:
         format_sql: true
     show-sql: false
 
+  # MVC：404 抛 NoHandlerFoundException，让 GlobalExceptionHandler 能统一接住
+  # （否则会直接走 Spring 默认 /error 页面，丢失 traceId / 业务 Result 格式）
+  # 注意：保留默认静态资源映射（add-mappings=true），项目自己注册的 /static/**
+  # 上传文件目录不能被关掉；这里只控制"动态 controller 路由"的 404 行为。
+  mvc:
+    throw-exception-if-no-handler-found: true
+
   # Jackson
   jackson:
     date-format: yyyy-MM-dd HH:mm:ss
@@ -137,9 +144,11 @@ springdoc:
 # 生产环境请立即登录后台修改密码！
 
 # 日志
+# pattern 里 %X{traceId} 取自 SLF4J MDC，由 TraceIdFilter 在请求入口注入。
+# 非请求线程（如 @Scheduled / @Async / 启动期）MDC 为空，pattern 输出 "-" 占位。
 logging:
   level:
     root: INFO
     com.lanprojects.fitcoach: DEBUG
   pattern:
-    console: "%d{HH:mm:ss.SSS} [%thread] %-5level %logger{36} - %msg%n"
+    console: "%d{HH:mm:ss.SSS} [%thread] %-5level [%X{traceId:--}] %logger{36} - %msg%n"
