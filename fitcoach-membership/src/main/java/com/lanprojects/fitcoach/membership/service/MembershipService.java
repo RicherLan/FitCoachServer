@@ -64,6 +64,32 @@ public class MembershipService {
     }
 
     /**
+     * 批量按 userId 拉会员记录，返回 {userId → UserMembership}。
+     * <p>列表场景（如 admin 批量查会员状态）专用，避免逐条 select 引发 N+1。
+     * <p>没有会员记录的 userId 不会出现在结果 map 中。
+     */
+    public java.util.Map<Long, UserMembership> findMembershipsByUserIds(java.util.Collection<Long> userIds) {
+        if (userIds == null || userIds.isEmpty()) {
+            return java.util.Collections.emptyMap();
+        }
+        return membershipRepository.findByUserIdIn(userIds).stream()
+                .collect(java.util.stream.Collectors.toMap(UserMembership::getUserId, m -> m));
+    }
+
+    /**
+     * 批量按 planCode 拉套餐，返回 {planCode → MembershipPlan}。
+     * <p>列表场景专用，避免循环 findPlanByCode 引发 N+1。
+     * <p>不存在的 planCode 不会出现在结果 map 中。
+     */
+    public java.util.Map<String, MembershipPlan> findPlansByCodes(java.util.Collection<String> planCodes) {
+        if (planCodes == null || planCodes.isEmpty()) {
+            return java.util.Collections.emptyMap();
+        }
+        return planRepository.findByPlanCodeIn(planCodes).stream()
+                .collect(java.util.stream.Collectors.toMap(MembershipPlan::getPlanCode, p -> p));
+    }
+
+    /**
      * 是否当前生效（now < expiresAt）。从未开通过 / 已过期 都返回 false。
      */
     public boolean isActive(Long userId) {
