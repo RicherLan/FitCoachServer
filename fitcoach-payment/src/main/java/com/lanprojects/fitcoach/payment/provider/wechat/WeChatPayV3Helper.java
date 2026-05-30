@@ -5,10 +5,14 @@ import lombok.extern.slf4j.Slf4j;
 import javax.crypto.Cipher;
 import javax.crypto.spec.GCMParameterSpec;
 import javax.crypto.spec.SecretKeySpec;
+import java.io.ByteArrayInputStream;
 import java.nio.charset.StandardCharsets;
 import java.security.KeyFactory;
 import java.security.PrivateKey;
+import java.security.PublicKey;
 import java.security.Signature;
+import java.security.cert.CertificateFactory;
+import java.security.cert.X509Certificate;
 import java.security.spec.PKCS8EncodedKeySpec;
 import java.util.Base64;
 import java.util.UUID;
@@ -161,23 +165,57 @@ public final class WeChatPayV3Helper {
      * 校验微信回调签名（Wechatpay-Signature header）。
      *
      * <p>签名验证内容 = timestamp + "\n" + nonce + "\n" + body + "\n"，
-     * 使用微信平台公钥 RSA-SHA256 校验。
+     * 使用微信平台公钥 RSA-SHA256 校验。同时校验时间戳偏差（防重放，5 分钟窗口）。
      *
-     * <p><b>注</b>：完整实现需要下载微信平台证书并缓存。MVP 阶段如果没有配置平台证书，
-     * 此方法返回 true（跳过验签），但打 WARN 日志。上线前务必配置平台证书并开启验签。
+     * <p><b>平台证书获取</b>：商户首次接入时，需用商户私钥调微信 /v3/certificates 接口下载平台证书 PEM，
+     * 配到 sysConfig 的 {@code payment.wechat.platformCertPem}。微信平台证书定期轮换（约 1 年），
+     * 后续应实现自动拉取 + 缓存（当前 MVP 阶段手动配置即可）。
      *
-     * @param timestamp 回调 header Wechatpay-Timestamp
-     * @param nonce     回调 header Wechatpay-Nonce
-     * @param body      回调 body
-     * @param signature 回调 header Wechatpay-Signature (Base64)
+     * @param timestamp         回调 header Wechatpay-Timestamp
+     * @param nonce             回调 header Wechatpay-Nonce
+     * @param body              回调 body 原文（不能预解析）
+     * @param signature         回调 header Wechatpay-Signature (Base64)
+     * @param platformPublicKey 微信平台证书提取出的公钥
      * @return 签名是否合法
      */
-    public static boolean verifyCallbackSignature(String timestamp, String nonce, String body, String signature) {
-        // TODO(P2): 实现微信平台证书下载 + 缓存 + 验签
-        // MVP 阶段：跳过验签但打 WARN 日志（回调 URL 本身是保密的 + AES 解密也是一层保护）
-        log.warn("[wechat-pay] 回调签名校验跳过（MVP 阶段），建议生产环境配置微信平台证书。" +
-                "timestamp={} nonce={} bodyLen={}", timestamp, nonce, body == null ? 0 : body.length());
-        return true;
+    public static boolean verifyCallbackSignature(String timestamp, String nonce, String body,
+                                                   String signature, PublicKey platformPublicKey) {
+        if (timestamp == null || nonce == null || body == null
+                || signature == null || platformPublicKey == null) {
+            log.error("[wechat-pay] 验签参数缺失 timestamp?={} nonce?={} body?={} sig?={} key?={}",
+                    timestamp != null, nonce != null, body != null,
+                    signature != null, platformPublicKey != null);
+            return false;
+        }
+
+        // 校验时间戳防重放（允许 5 分钟偏差）
+        try {
+            long callbackTs = Long.parseLong(timestamp);
+            long nowTs = System.currentTimeMillis() / 1000;
+            if (Math.abs(nowTs - callbackTs) > 300) {
+                log.error("[wechat-pay] 验签失败：时间戳偏差超过 5 分钟 callbackTs={} nowTs={}",
+                        callbackTs, nowTs);
+                return false;
+            }
+        } catch (NumberFormatException e) {
+            log.error("[wechat-pay] 验签失败：时间戳非法 timestamp={}", timestamp);
+            return false;
+        }
+
+        String message = timestamp + "\n" + nonce + "\n" + body + "\n";
+        try {
+            Signature verifier = Signature.getInstance(SIGN_ALGORITHM);
+            verifier.initVerify(platformPublicKey);
+            verifier.update(message.getBytes(StandardCharsets.UTF_8));
+            boolean ok = verifier.verify(Base64.getDecoder().decode(signature));
+            if (!ok) {
+                log.error("[wechat-pay] 验签失败：RSA 签名校验不通过");
+            }
+            return ok;
+        } catch (Exception e) {
+            log.error("[wechat-pay] 验签异常", e);
+            return false;
+        }
     }
 
     // ====== 私钥解析 ======
@@ -200,6 +238,28 @@ public final class WeChatPayV3Helper {
             return KeyFactory.getInstance("RSA").generatePrivate(spec);
         } catch (Exception e) {
             throw new RuntimeException("加载微信支付商户私钥失败（PEM 格式解析错误）", e);
+        }
+    }
+
+    /**
+     * 从 PEM 格式的 X.509 证书中提取公钥。微信平台证书可通过商户证书调
+     * /v3/certificates 接口下载，返回的 ciphertext 经 AES-GCM 解密后即为 PEM 字符串。
+     *
+     * @param certPem 证书 PEM 字符串（带或不带 "-----BEGIN CERTIFICATE-----" 标记均可）
+     */
+    public static PublicKey loadPublicKeyFromCertPem(String certPem) {
+        try {
+            String normalized = certPem
+                    .replace("-----BEGIN CERTIFICATE-----", "")
+                    .replace("-----END CERTIFICATE-----", "")
+                    .replaceAll("\\s+", "");
+            byte[] certBytes = Base64.getDecoder().decode(normalized);
+            CertificateFactory factory = CertificateFactory.getInstance("X.509");
+            X509Certificate cert = (X509Certificate) factory.generateCertificate(
+                    new ByteArrayInputStream(certBytes));
+            return cert.getPublicKey();
+        } catch (Exception e) {
+            throw new RuntimeException("加载微信平台证书失败（PEM 格式解析错误）", e);
         }
     }
 

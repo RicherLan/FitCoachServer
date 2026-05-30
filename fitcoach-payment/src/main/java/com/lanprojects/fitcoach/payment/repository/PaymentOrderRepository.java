@@ -36,6 +36,11 @@ public interface PaymentOrderRepository extends JpaRepository<PaymentOrder, Long
     List<PaymentOrder> findStaleByStatusBefore(OrderStatus status, LocalDateTime before);
 
     /**
+     * 最近一段时间内 status=PAID 的订单（按 paidAt 升序），用于会员激活补偿任务校验对应的会员是否已激活。
+     */
+    List<PaymentOrder> findByStatusAndPaidAtAfterOrderByPaidAtAsc(OrderStatus status, LocalDateTime since);
+
+    /**
      * 是否有该套餐的订单（admin 删除套餐时用，有订单则不允许删除）
      */
     boolean existsByPlanCode(String planCode);

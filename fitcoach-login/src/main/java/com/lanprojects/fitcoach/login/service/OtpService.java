@@ -151,8 +151,12 @@ public class OtpService {
      * </ul>
      */
     public void verifyOtp(String phone, String code) {
+        // 防御性：Caffeine 不接受 null key；上游 controller 已 @Valid 但内部调用也可能漏校验
+        if (phone == null || phone.isBlank() || code == null) {
+            throw new BusinessException(ResultCode.OTP_INVALID);
+        }
         OtpEntry entry = otpStore.getIfPresent(phone);
-        if (entry == null || code == null) {
+        if (entry == null) {
             throw new BusinessException(ResultCode.OTP_INVALID);
         }
         // 错误次数已超 → 直接作废 OTP，要求重发

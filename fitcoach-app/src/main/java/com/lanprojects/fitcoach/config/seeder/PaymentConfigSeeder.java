@@ -61,6 +61,12 @@ public class PaymentConfigSeeder implements CommandLineRunner {
         inserted += ensureExists(new SysConfig(
                 PaymentConfigKeys.WECHAT_MCH_PRIVATE_KEY, configCryptoService.encrypt(""), "payment",
                 "微信支付商户 API 私钥（PEM 格式，加密存储）", true));
+        inserted += ensureExists(new SysConfig(
+                PaymentConfigKeys.WECHAT_PLATFORM_CERT_PEM, configCryptoService.encrypt(""), "payment",
+                "微信支付平台证书 PEM（回调验签用，加密存储；商户证书调 /v3/certificates 接口下载）", true));
+        inserted += ensureExists(new SysConfig(
+                PaymentConfigKeys.WECHAT_SKIP_CALLBACK_SIGNATURE, "false", "payment",
+                "开发模式跳过回调验签（生产环境严禁开启）"));
 
         // Apple IAP — 默认全部空，等申请到苹果开发者账号
         inserted += ensureExists(new SysConfig(

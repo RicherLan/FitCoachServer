@@ -11,6 +11,7 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
 
+import java.security.PublicKey;
 import java.util.Map;
 
 /**
@@ -74,10 +75,9 @@ public class WeChatCallbackHandler {
                                    String body) {
         log.info("[wechat-pay] 收到微信回调 bodyLen={}", body == null ? 0 : body.length());
 
-        // 1. 签名校验（MVP 阶段跳过，见 WeChatPayV3Helper.verifyCallbackSignature 注释）
-        if (!WeChatPayV3Helper.verifyCallbackSignature(
-                wechatpayTimestamp, wechatpayNonce, body, wechatpaySignature)) {
-            log.error("[wechat-pay] 回调签名校验失败");
+        // 1. 签名校验：默认强制启用，开发模式可通过 sysConfig 跳过（生产严禁开启）
+        if (!verifyCallbackSignatureOrSkip(wechatpayTimestamp, wechatpayNonce,
+                wechatpaySignature, wechatpaySerial, body)) {
             return false;
         }
 
@@ -112,6 +112,10 @@ public class WeChatCallbackHandler {
             }
 
             String decryptedJson = WeChatPayV3Helper.decryptAesGcm(apiV3Key, nonce, associatedData, ciphertext);
+            if (decryptedJson == null || decryptedJson.isBlank()) {
+                log.error("[wechat-pay] 回调解密返回空，可能是 API V3 密钥配置错误");
+                return false;
+            }
             log.info("[wechat-pay] 回调解密成功 decryptedLen={}", decryptedJson.length());
 
             // 4. 解析解密后的交易数据
@@ -147,5 +151,46 @@ public class WeChatCallbackHandler {
             log.error("[wechat-pay] 回调处理异常", e);
             return false; // 返回 FAIL，微信会重试
         }
+    }
+
+    /**
+     * 包装签名校验流程：优先读取平台证书做真验签，开发模式可通过 sysConfig 跳过。
+     * 跳过时打 ERROR 日志（不是 WARN），方便监控告警捕获生产环境的危险配置。
+     */
+    private boolean verifyCallbackSignatureOrSkip(String timestamp, String nonce,
+                                                    String signature, String serial, String body) {
+        boolean skip = sysConfigService.getBoolValue(
+                PaymentConfigKeys.WECHAT_SKIP_CALLBACK_SIGNATURE, false);
+        if (skip) {
+            log.error("[wechat-pay] ⚠️ 回调签名校验已被跳过（{}=true），生产环境严禁开启！" +
+                            " timestamp={} nonce={} serial={}",
+                    PaymentConfigKeys.WECHAT_SKIP_CALLBACK_SIGNATURE,
+                    timestamp, nonce, serial);
+            return true;
+        }
+
+        String platformCertPem = sysConfigService.getValue(PaymentConfigKeys.WECHAT_PLATFORM_CERT_PEM);
+        if (platformCertPem == null || platformCertPem.isBlank()) {
+            log.error("[wechat-pay] 缺少微信平台证书配置 ({})，拒绝处理回调",
+                    PaymentConfigKeys.WECHAT_PLATFORM_CERT_PEM);
+            return false;
+        }
+
+        PublicKey platformPublicKey;
+        try {
+            platformPublicKey = WeChatPayV3Helper.loadPublicKeyFromCertPem(platformCertPem);
+        } catch (Exception e) {
+            log.error("[wechat-pay] 平台证书解析失败，请检查 PEM 格式", e);
+            return false;
+        }
+
+        if (!WeChatPayV3Helper.verifyCallbackSignature(
+                timestamp, nonce, body, signature, platformPublicKey)) {
+            log.error("[wechat-pay] 回调签名校验失败 timestamp={} nonce={} serial={}",
+                    timestamp, nonce, serial);
+            return false;
+        }
+        log.info("[wechat-pay] 回调签名校验通过 serial={}", serial);
+        return true;
     }
 }

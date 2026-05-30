@@ -33,6 +33,10 @@ public final class PaymentConfigKeys {
     public static final String WECHAT_NOTIFY_URL = "payment.wechat.notifyUrl";
     /** 商户 API 私钥（PEM 格式，加密存储） */
     public static final String WECHAT_MCH_PRIVATE_KEY = "payment.wechat.mchPrivateKey";
+    /** 微信支付平台证书 PEM（用于回调验签，加密存储）。可通过商户证书调 /v3/certificates 接口获取 */
+    public static final String WECHAT_PLATFORM_CERT_PEM = "payment.wechat.platformCertPem";
+    /** 开发模式：跳过微信回调签名校验（默认 false，生产环境严禁开启） */
+    public static final String WECHAT_SKIP_CALLBACK_SIGNATURE = "payment.wechat.skipCallbackSignature";
 
     // ====== Apple IAP ======
 
