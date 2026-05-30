@@ -40,5 +40,15 @@
             <groupId>com.github.ben-manes.caffeine</groupId>
             <artifactId>caffeine</artifactId>
         </dependency>
+
+        <!-- springdoc-openapi —— 提供 @Tag/@Operation/@Schema 等注解 + Swagger UI。
+             放在 common 模块的好处：所有业务模块（admin/login/membership/...）的
+             Controller 都能直接用注解写文档，且全局只有一份依赖版本管理。
+             实际 Swagger UI 路径仅在主启动模块（fitcoach-app）暴露：
+               /swagger-ui.html  /v3/api-docs  /v3/api-docs/{groupName} -->
+        <dependency>
+            <groupId>org.springdoc</groupId>
+            <artifactId>springdoc-openapi-starter-webmvc-ui</artifactId>
+        </dependency>
     </dependencies>
 </project>

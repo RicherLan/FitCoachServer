@@ -12,6 +12,7 @@ import com.lanprojects.fitcoach.common.exception.BusinessException;
 import com.lanprojects.fitcoach.common.model.Result;
 import com.lanprojects.fitcoach.common.model.ResultCode;
 import com.lanprojects.fitcoach.login.entity.User;
+import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.servlet.http.HttpServletRequest;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -34,6 +35,7 @@ import org.springframework.web.bind.annotation.RestController;
  * <p>所有写操作走 {@link AdminAuthInterceptor} 的角色拦截，VIEWER 直接被拒（7008）。
  */
 @Slf4j
+@Tag(name = "后台-用户管理", description = "C 端用户分页/详情/启停（VIEWER 只读）")
 @RestController
 @RequestMapping("/api/admin/users")
 @RequiredArgsConstructor

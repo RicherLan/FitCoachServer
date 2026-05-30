@@ -8,6 +8,7 @@ import com.lanprojects.fitcoach.admin.security.AdminAuthInterceptor;
 import com.lanprojects.fitcoach.common.model.Result;
 import com.lanprojects.fitcoach.exercise.entity.Exercise;
 import com.lanprojects.fitcoach.exercise.service.ExerciseService;
+import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
@@ -43,6 +44,7 @@ import java.util.List;
  * {@link ExerciseService#update} 内部强制（违反返回 7504 EXERCISE_LAST_FREE_IN_GROUP）。
  */
 @Slf4j
+@Tag(name = "后台-健身动作", description = "动作 CRUD + 启停 + 免费/付费切换")
 @RestController
 @RequestMapping("/api/admin/exercises")
 @RequiredArgsConstructor

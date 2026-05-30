@@ -13,6 +13,7 @@ import com.lanprojects.fitcoach.common.model.Result;
 import com.lanprojects.fitcoach.common.model.ResultCode;
 import com.lanprojects.fitcoach.feedback.entity.FeedbackStatus;
 import com.lanprojects.fitcoach.feedback.entity.FeedbackType;
+import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.servlet.http.HttpServletRequest;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -34,6 +35,7 @@ import org.springframework.web.bind.annotation.RestController;
  * </ul>
  */
 @Slf4j
+@Tag(name = "后台-反馈管理", description = "用户反馈列表/详情/状态流转 + 处理回复")
 @RestController
 @RequestMapping("/api/admin/feedbacks")
 @RequiredArgsConstructor

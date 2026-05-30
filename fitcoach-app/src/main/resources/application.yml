@@ -102,6 +102,34 @@ captcha:
   app-id: ${CAPTCHA_APP_ID:199923205}
   app-secret-key: ${CAPTCHA_APP_SECRET_KEY:oCscE3Kf2mIvFLrJhgEHC7Qss}
 
+# ====== OpenAPI / Swagger 文档（springdoc-openapi） ======
+# 默认开启（dev 环境），生产建议在 application-prod.yml 关掉或加 Basic Auth。
+# 入口：
+#   - Swagger UI:  http://host:port/swagger-ui.html
+#   - JSON 文档：  http://host:port/v3/api-docs            （全部）
+#                 http://host:port/v3/api-docs/admin      （Admin 后台分组）
+#                 http://host:port/v3/api-docs/client     （App 客户端分组）
+# 注意：springdoc 自身路径 /swagger-ui/** /v3/api-docs/** 不在 /api/** 命名空间下，
+# 不会被 ClientInfoInterceptor / AdminAuthInterceptor 拦截，无需额外放行。
+springdoc:
+  api-docs:
+    enabled: true
+    path: /v3/api-docs
+  swagger-ui:
+    enabled: true
+    path: /swagger-ui.html
+    # 按 HTTP 方法排序更直观（GET → POST → PUT → DELETE）
+    operations-sorter: method
+    tags-sorter: alpha
+    # 默认折叠，避免 controller 多时一开页一片混乱
+    doc-expansion: none
+    # 持久化 Authorize 输入的 token 到 localStorage，刷新页面不丢
+    persist-authorization: true
+  # 不把 Spring Boot Actuator / 内置错误端点暴露到文档中
+  paths-to-exclude:
+    - /error
+    - /actuator/**
+
 # ====== 后台管理（fitcoach-admin） ======
 # 管理员 token 过期时间默认 8h（比客户端 access token 2h 更长 —— 后台操作场景一次登录工作半天）。
 # 该配置存放在 sys_config.admin.token_expire_hours，本文件不直接配置；

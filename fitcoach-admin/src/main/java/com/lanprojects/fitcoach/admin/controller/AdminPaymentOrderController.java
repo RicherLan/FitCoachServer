@@ -14,6 +14,7 @@ import com.lanprojects.fitcoach.login.repository.UserRepository;
 import com.lanprojects.fitcoach.payment.entity.OrderStatus;
 import com.lanprojects.fitcoach.payment.entity.PaymentOrder;
 import com.lanprojects.fitcoach.payment.service.PaymentService;
+import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
@@ -40,6 +41,7 @@ import java.util.stream.Collectors;
  * </ul>
  */
 @Slf4j
+@Tag(name = "后台-支付订单", description = "订单列表/详情/退款（V1 退款仅记账）")
 @RestController
 @RequestMapping("/api/admin/payment/orders")
 @RequiredArgsConstructor

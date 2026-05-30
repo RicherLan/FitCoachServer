@@ -4,6 +4,7 @@ import com.lanprojects.fitcoach.common.model.Result;
 import com.lanprojects.fitcoach.exercise.dto.ExerciseDTO;
 import com.lanprojects.fitcoach.exercise.service.ExerciseService;
 import com.lanprojects.fitcoach.login.support.AuthSupport;
+import io.swagger.v3.oas.annotations.tags.Tag;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -27,6 +28,7 @@ import java.util.List;
  * 由各业务接口在自己内部走 MembershipService.requireMembership 校验，本接口不做拦截。
  */
 @Slf4j
+@Tag(name = "客户端-健身动作", description = "拉取启用动作列表（含付费动作 + isFree 标记）")
 @RestController
 @RequestMapping("/api/exercise")
 @RequiredArgsConstructor

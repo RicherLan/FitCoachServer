@@ -8,6 +8,7 @@ import com.lanprojects.fitcoach.admin.security.AdminAuthInterceptor;
 import com.lanprojects.fitcoach.appversion.entity.AppVersionEntity;
 import com.lanprojects.fitcoach.appversion.service.AppVersionService;
 import com.lanprojects.fitcoach.common.model.Result;
+import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
@@ -42,6 +43,7 @@ import java.util.List;
  * App 端检查更新接口在 {@code /api/app/version/latest}（无鉴权），与此处隔离。
  */
 @Slf4j
+@Tag(name = "后台-App 版本管理", description = "上传/发布/下线 App 包，控制强制更新策略")
 @RestController
 @RequestMapping("/api/admin/app-versions")
 @RequiredArgsConstructor

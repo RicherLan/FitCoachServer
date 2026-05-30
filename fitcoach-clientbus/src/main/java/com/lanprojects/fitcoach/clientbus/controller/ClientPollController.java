@@ -6,6 +6,7 @@ import com.lanprojects.fitcoach.common.model.Result;
 import com.lanprojects.fitcoach.common.model.ResultCode;
 import com.lanprojects.fitcoach.login.service.AuthService;
 import com.lanprojects.fitcoach.login.service.UserActivityService;
+import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.annotation.PostConstruct;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -48,6 +49,7 @@ import java.util.Set;
  * 让所有未来加入的能力自动获得"在线状态上报"，不需要每个业务接口各自调一遍。
  */
 @Slf4j
+@Tag(name = "客户端-通用轮询", description = "聚合服务端推（日志拉取/版本/远程开关/强制下线/站内信）的单一入口")
 @RestController
 @RequestMapping("/api/client")
 @RequiredArgsConstructor

@@ -8,6 +8,7 @@ import com.lanprojects.fitcoach.log.dto.ReportFailureRequest;
 import com.lanprojects.fitcoach.log.dto.UploadLogResponse;
 import com.lanprojects.fitcoach.log.service.LogPullService;
 import com.lanprojects.fitcoach.login.service.AuthService;
+import io.swagger.v3.oas.annotations.tags.Tag;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -36,6 +37,7 @@ import org.springframework.web.multipart.MultipartFile;
  * 也跟随挪到通用入口，本 controller 不再调用心跳。
  */
 @Slf4j
+@Tag(name = "客户端-日志上报", description = "上传日志 zip + 失败上报（任务由 admin 后台触发）")
 @RestController
 @RequestMapping("/api/logs")
 @RequiredArgsConstructor

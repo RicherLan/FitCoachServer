@@ -10,6 +10,7 @@ import com.lanprojects.fitcoach.admin.security.AdminAuthInterceptor;
 import com.lanprojects.fitcoach.common.exception.BusinessException;
 import com.lanprojects.fitcoach.common.model.Result;
 import com.lanprojects.fitcoach.common.model.ResultCode;
+import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.servlet.http.HttpServletRequest;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -37,6 +38,7 @@ import java.time.ZoneId;
  * <p>不提供"修改 / 删除审计日志"接口 —— 审计本身要求不可篡改。
  */
 @Slf4j
+@Tag(name = "后台-审计日志", description = "高危操作审计查询（仅 SUPER_ADMIN）")
 @RestController
 @RequestMapping("/api/admin/audit-logs")
 @RequiredArgsConstructor

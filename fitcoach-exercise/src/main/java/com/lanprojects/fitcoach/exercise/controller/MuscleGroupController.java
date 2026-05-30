@@ -4,6 +4,7 @@ import com.lanprojects.fitcoach.common.model.Result;
 import com.lanprojects.fitcoach.exercise.dto.MuscleGroupDTO;
 import com.lanprojects.fitcoach.exercise.service.MuscleGroupService;
 import com.lanprojects.fitcoach.login.support.AuthSupport;
+import io.swagger.v3.oas.annotations.tags.Tag;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -24,6 +25,7 @@ import java.util.List;
  * <p>会员/付费控制：本接口不涉及会员校验（肌群本身不分免费/付费），所有登录用户可见全部启用肌群。
  */
 @Slf4j
+@Tag(name = "客户端-肌群", description = "拉取启用肌群列表（首页类目数据下发）")
 @RestController
 @RequestMapping("/api/muscle-group")
 @RequiredArgsConstructor

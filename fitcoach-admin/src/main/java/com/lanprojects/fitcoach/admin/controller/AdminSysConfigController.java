@@ -12,6 +12,7 @@ import com.lanprojects.fitcoach.common.config.service.SysConfigService;
 import com.lanprojects.fitcoach.common.exception.BusinessException;
 import com.lanprojects.fitcoach.common.model.Result;
 import com.lanprojects.fitcoach.common.model.ResultCode;
+import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.servlet.http.HttpServletRequest;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -38,6 +39,7 @@ import java.util.stream.Collectors;
  * 仅在编辑提交时传入新的明文值才覆盖。
  */
 @Slf4j
+@Tag(name = "后台-系统配置", description = "动态配置读写 + 加密字段管理 + 缓存刷新")
 @RestController
 @RequestMapping("/api/admin/sys-config")
 @RequiredArgsConstructor

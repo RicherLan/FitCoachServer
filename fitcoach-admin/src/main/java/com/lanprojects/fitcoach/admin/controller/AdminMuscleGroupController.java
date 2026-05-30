@@ -8,6 +8,7 @@ import com.lanprojects.fitcoach.admin.security.AdminAuthInterceptor;
 import com.lanprojects.fitcoach.common.model.Result;
 import com.lanprojects.fitcoach.exercise.entity.MuscleGroupEntity;
 import com.lanprojects.fitcoach.exercise.service.MuscleGroupService;
+import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
@@ -39,6 +40,7 @@ import java.util.List;
  * </ul>
  */
 @Slf4j
+@Tag(name = "后台-肌群管理", description = "肌群 CRUD + 上下架（删除前需先迁移动作）")
 @RestController
 @RequestMapping("/api/admin/muscle-groups")
 @RequiredArgsConstructor

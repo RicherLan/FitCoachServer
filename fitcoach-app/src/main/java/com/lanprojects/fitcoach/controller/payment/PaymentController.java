@@ -13,6 +13,7 @@ import com.lanprojects.fitcoach.payment.provider.wechat.WeChatCallbackHandler;
 import com.lanprojects.fitcoach.payment.service.CreateOrderCommand;
 import com.lanprojects.fitcoach.payment.service.PaymentService;
 import com.lanprojects.fitcoach.payment.service.PlanSnapshot;
+import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
@@ -38,6 +39,7 @@ import java.util.Map;
  * <p>接口前缀：/api/payment
  */
 @Slf4j
+@Tag(name = "客户端-支付", description = "创建订单/查询订单/微信回调（micro: 微信回调走签名校验非 token）")
 @RestController
 @RequestMapping("/api/payment")
 @RequiredArgsConstructor

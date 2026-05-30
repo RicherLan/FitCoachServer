@@ -9,6 +9,7 @@ import com.lanprojects.fitcoach.login.dto.UpdateProfileRequest;
 import com.lanprojects.fitcoach.login.service.AuthService;
 import com.lanprojects.fitcoach.login.service.PasswordService;
 import com.lanprojects.fitcoach.login.service.UserProfileService;
+import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 
 import java.util.Map;
@@ -25,6 +26,7 @@ import org.springframework.web.multipart.MultipartFile;
  * 不引入 Spring Security 这种重武器，保持现有项目轻量。
  */
 @Slf4j
+@Tag(name = "客户端-用户资料", description = "获取/更新自己的资料、头像上传、设置/修改密码、注销账号")
 @RestController
 @RequestMapping("/api/user")
 @RequiredArgsConstructor

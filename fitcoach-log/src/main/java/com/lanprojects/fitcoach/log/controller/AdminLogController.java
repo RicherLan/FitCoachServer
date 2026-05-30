@@ -10,6 +10,7 @@ import com.lanprojects.fitcoach.log.entity.LogPullStatus;
 import com.lanprojects.fitcoach.log.entity.LogPullTask;
 import com.lanprojects.fitcoach.log.service.LogPullService;
 import com.lanprojects.fitcoach.log.service.LogStorageService;
+import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.servlet.http.HttpServletRequest;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -41,6 +42,7 @@ import java.util.List;
  * controller 层只关心业务，不重复鉴权代码。{@code admin.username} 从 request attribute 取。
  */
 @Slf4j
+@Tag(name = "后台-客户端日志", description = "客户端日志拉取任务管理：创建任务、查询状态、下载日志包")
 @RestController
 @RequestMapping("/api/admin/logs/tasks")
 public class AdminLogController {

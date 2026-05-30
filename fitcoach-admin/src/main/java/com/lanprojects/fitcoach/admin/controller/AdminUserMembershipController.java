@@ -13,6 +13,7 @@ import com.lanprojects.fitcoach.login.repository.UserRepository;
 import com.lanprojects.fitcoach.membership.entity.MembershipPlan;
 import com.lanprojects.fitcoach.membership.entity.UserMembership;
 import com.lanprojects.fitcoach.membership.service.MembershipService;
+import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
@@ -36,6 +37,7 @@ import java.util.Map;
  * 当前 admin 已经有用户管理（{@link AdminUserController}），运营从那里搜用户进来即可。
  */
 @Slf4j
+@Tag(name = "后台-用户会员", description = "查/赠送/撤销指定用户的会员（按 uid 操作）")
 @RestController
 @RequestMapping("/api/admin/membership/users")
 @RequiredArgsConstructor

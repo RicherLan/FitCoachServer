@@ -3,6 +3,7 @@ package com.lanprojects.fitcoach.admin.controller;
 import com.lanprojects.fitcoach.admin.dto.DashboardOverviewDto;
 import com.lanprojects.fitcoach.admin.service.DashboardService;
 import com.lanprojects.fitcoach.common.model.Result;
+import io.swagger.v3.oas.annotations.tags.Tag;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.web.bind.annotation.GetMapping;

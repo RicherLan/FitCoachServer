@@ -14,6 +14,7 @@ import com.lanprojects.fitcoach.login.service.AuthService;
 import com.lanprojects.fitcoach.login.service.CaptchaService;
 import com.lanprojects.fitcoach.login.service.OtpService;
 import com.lanprojects.fitcoach.login.service.PasswordService;
+import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
@@ -26,6 +27,7 @@ import org.springframework.web.bind.annotation.*;
  * 接口前缀：/api/auth
  */
 @Slf4j
+@Tag(name = "客户端-登录认证", description = "微信/手机号/密码登录、OTP 发送、token 刷新、修改密码")
 @RestController
 @RequestMapping("/api/auth")
 @RequiredArgsConstructor

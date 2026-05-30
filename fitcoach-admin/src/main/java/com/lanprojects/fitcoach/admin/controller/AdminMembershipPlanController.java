@@ -7,6 +7,7 @@ import com.lanprojects.fitcoach.admin.dto.membership.AdminPlanRequest;
 import com.lanprojects.fitcoach.common.model.Result;
 import com.lanprojects.fitcoach.membership.entity.MembershipPlan;
 import com.lanprojects.fitcoach.membership.service.MembershipService;
+import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
@@ -32,6 +33,7 @@ import java.util.List;
  * 强制删除需运营走 SQL 后门。
  */
 @Slf4j
+@Tag(name = "后台-会员套餐", description = "套餐 CRUD + 上下架（不可硬删，避免破坏订单关联）")
 @RestController
 @RequestMapping("/api/admin/membership/plans")
 @RequiredArgsConstructor

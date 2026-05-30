@@ -6,6 +6,7 @@ import com.lanprojects.fitcoach.membership.dto.MembershipPlanDTO;
 import com.lanprojects.fitcoach.membership.dto.MembershipStatusDTO;
 import com.lanprojects.fitcoach.membership.entity.MembershipPlan;
 import com.lanprojects.fitcoach.membership.service.MembershipService;
+import io.swagger.v3.oas.annotations.tags.Tag;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -32,6 +33,7 @@ import java.util.stream.Collectors;
  * </ul>
  */
 @Slf4j
+@Tag(name = "客户端-会员", description = "查可购套餐 + 查自己的会员状态（只读）")
 @RestController
 @RequestMapping("/api/membership")
 @RequiredArgsConstructor

@@ -10,6 +10,7 @@ import com.lanprojects.fitcoach.admin.security.AdminAuthInterceptor;
 import com.lanprojects.fitcoach.admin.service.AdminAuthService;
 import com.lanprojects.fitcoach.common.model.Result;
 import com.lanprojects.fitcoach.common.security.ClientIpResolver;
+import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.servlet.http.HttpServletRequest;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -33,6 +34,7 @@ import org.springframework.web.bind.annotation.RestController;
  * {@code Authorization: Bearer <token>}。
  */
 @Slf4j
+@Tag(name = "后台-管理员认证", description = "登录、获取自身资料、修改密码")
 @RestController
 @RequestMapping("/api/admin/auth")
 @RequiredArgsConstructor

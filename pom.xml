@@ -39,6 +39,8 @@
         <hutool.version>5.8.26</hutool.version>
         <caffeine.version>3.1.8</caffeine.version>
         <tencentcloud.version>3.1.1064</tencentcloud.version>
+        <!-- springdoc-openapi 2.5.x 适配 Spring Boot 3.2.x；2.6+ 需要 Boot 3.3 -->
+        <springdoc.version>2.5.0</springdoc.version>
     </properties>
 
     <dependencyManagement>
@@ -135,6 +137,15 @@
                 <groupId>com.tencentcloudapi</groupId>
                 <artifactId>tencentcloud-sdk-java</artifactId>
                 <version>${tencentcloud.version}</version>
+            </dependency>
+
+            <!-- springdoc-openapi —— Spring Boot 3 的 OpenAPI 3.0 文档生成器。
+                 同时提供 @Tag/@Operation/@Schema 注解 + /v3/api-docs + /swagger-ui.html。
+                 部署时通过 springdoc.api-docs.enabled=false 可整体关闭（生产建议关或加鉴权）。 -->
+            <dependency>
+                <groupId>org.springdoc</groupId>
+                <artifactId>springdoc-openapi-starter-webmvc-ui</artifactId>
+                <version>${springdoc.version}</version>
             </dependency>
         </dependencies>
     </dependencyManagement>

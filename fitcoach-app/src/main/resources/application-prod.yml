@@ -1,0 +1,36 @@
+# ====== 生产环境配置 ======
+# 通过 --spring.profiles.active=prod 激活（见 shell/start.sh）
+# 敏感配置（数据库密码 / 第三方密钥）走环境变量，不入 git。
+
+spring:
+  datasource:
+    # 生产环境数据库连接（密码必须用环境变量注入，禁止硬编码）
+    url: ${DB_URL:jdbc:mysql://localhost:3306/fitcoach?useUnicode=true&characterEncoding=utf-8&useSSL=false&serverTimezone=Asia/Shanghai&allowPublicKeyRetrieval=true}
+    username: ${DB_USERNAME:fitcoach}
+    password: ${DB_PASSWORD:}
+    driver-class-name: com.mysql.cj.jdbc.Driver
+
+  jpa:
+    # 生产关闭 show-sql，避免日志被 SQL 撑爆；DEBUG 模式排障时临时打开
+    show-sql: false
+    hibernate:
+      # 生产用 validate 或 none —— 表结构变更必须走 flyway/手动 SQL 评审，
+      # 严禁让 hibernate 自动改表（一不小心删字段就是事故）
+      ddl-auto: validate
+
+# ====== Swagger 在生产默认关闭 ======
+# 避免接口列表 / 请求体结构裸暴露给互联网爬虫和扫描器。
+# 如需临时排查问题，可在服务器 docker run 加 -e SPRINGDOC_ENABLED=true 临时打开，
+# 排查完务必关回去，且建议加 nginx Basic Auth 双重防护。
+springdoc:
+  api-docs:
+    enabled: ${SPRINGDOC_ENABLED:false}
+  swagger-ui:
+    enabled: ${SPRINGDOC_ENABLED:false}
+
+# 生产日志：降到 INFO，避免 DEBUG 把磁盘打爆
+logging:
+  level:
+    root: INFO
+    com.lanprojects.fitcoach: INFO
+    org.hibernate.SQL: WARN

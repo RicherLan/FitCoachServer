@@ -8,6 +8,7 @@ import com.lanprojects.fitcoach.common.client.ClientVersionInfo;
 import com.lanprojects.fitcoach.common.exception.BusinessException;
 import com.lanprojects.fitcoach.common.model.Result;
 import com.lanprojects.fitcoach.common.model.ResultCode;
+import io.swagger.v3.oas.annotations.tags.Tag;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -32,6 +33,7 @@ import java.util.Optional;
  * 等于或大于（用户灰度装了更新版）都判为「无更新」。
  */
 @Slf4j
+@Tag(name = "客户端-App 版本", description = "检查更新（无需登录，老版本也能拉到强升提示）")
 @RestController
 @RequestMapping("/api/app/version")
 @RequiredArgsConstructor

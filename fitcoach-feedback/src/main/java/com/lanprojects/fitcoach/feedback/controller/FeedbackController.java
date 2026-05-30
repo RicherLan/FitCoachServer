@@ -8,6 +8,7 @@ import com.lanprojects.fitcoach.feedback.dto.FeedbackResponse;
 import com.lanprojects.fitcoach.feedback.dto.UploadAttachmentResponse;
 import com.lanprojects.fitcoach.feedback.service.FeedbackService;
 import com.lanprojects.fitcoach.login.service.AuthService;
+import io.swagger.v3.oas.annotations.tags.Tag;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.web.bind.annotation.*;
@@ -20,6 +21,7 @@ import org.springframework.web.multipart.MultipartFile;
  * 不引入 Spring Security 这类重武器。
  */
 @Slf4j
+@Tag(name = "客户端-反馈", description = "提交反馈 + 附件上传（图片≤1MB/张，最多 5 张）")
 @RestController
 @RequestMapping("/api/feedback")
 @RequiredArgsConstructor
