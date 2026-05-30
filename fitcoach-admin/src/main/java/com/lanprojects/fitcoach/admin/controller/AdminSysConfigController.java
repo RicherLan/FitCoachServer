@@ -1,5 +1,7 @@
 package com.lanprojects.fitcoach.admin.controller;
 
+import com.lanprojects.fitcoach.admin.audit.AdminAuditAction;
+import com.lanprojects.fitcoach.admin.audit.AdminAuditLogService;
 import com.lanprojects.fitcoach.admin.dto.sysconfig.SysConfigDto;
 import com.lanprojects.fitcoach.admin.dto.sysconfig.UpdateSysConfigRequest;
 import com.lanprojects.fitcoach.admin.security.AdminAuthInterceptor;
@@ -44,6 +46,7 @@ public class AdminSysConfigController {
     private final SysConfigRepository sysConfigRepository;
     private final SysConfigService sysConfigService;
     private final ConfigCryptoService configCryptoService;
+    private final AdminAuditLogService auditLogService;
 
     /**
      * 列表 — 全部或按分组筛选。
@@ -99,22 +102,29 @@ public class AdminSysConfigController {
                 .orElseThrow(() -> new BusinessException(ResultCode.SYS_CONFIG_NOT_FOUND));
 
         // 更新描述
+        boolean descChanged = false;
         if (body.getDescription() != null) {
             config.setDescription(body.getDescription());
+            descChanged = true;
         }
 
         // 更新启用状态
+        boolean enabledChanged = false;
         if (body.getEnabled() != null) {
             config.setEnabled(body.getEnabled());
+            enabledChanged = true;
         }
 
-        // 更新值（加密字段传明文，server 自动加密）
+        // 更新值（加密字段传明文，server 自动加密）。
+        // P1-18：审计 summary 只记录"值是否变更"而非真实值 —— sysConfig 可能存 jwt secret / api key 等敏感字段。
+        boolean valueChanged = false;
         if (body.getConfigValue() != null && !"******".equals(body.getConfigValue())) {
             if (Boolean.TRUE.equals(config.getEncrypted())) {
                 config.setConfigValue(configCryptoService.encrypt(body.getConfigValue()));
             } else {
                 config.setConfigValue(body.getConfigValue());
             }
+            valueChanged = true;
         }
 
         sysConfigRepository.save(config);
@@ -123,6 +133,10 @@ public class AdminSysConfigController {
         sysConfigService.refreshCache();
 
         log.info("[admin] {} 更新配置 key={} enabled={}", operator, configKey, config.getEnabled());
+        String summary = String.format("encrypted=%s, valueChanged=%s, descChanged=%s, enabledChanged=%s, enabled=%s",
+                Boolean.TRUE.equals(config.getEncrypted()),
+                valueChanged, descChanged, enabledChanged, config.getEnabled());
+        auditLogService.logSuccess(request, AdminAuditAction.UPDATE_SYS_CONFIG, "SYS_CONFIG", configKey, summary);
         return Result.success(SysConfigDto.from(config));
     }
 
@@ -137,6 +151,8 @@ public class AdminSysConfigController {
         String operator = (String) request.getAttribute(AdminAuthInterceptor.ATTR_ADMIN_USERNAME);
         sysConfigService.refreshCache();
         log.info("[admin] {} 手动刷新系统配置缓存", operator);
+        auditLogService.logSuccess(request, AdminAuditAction.REFRESH_SYS_CONFIG_CACHE,
+                "SYS_CONFIG", null, "manual cache refresh");
         return Result.success(null);
     }
 }

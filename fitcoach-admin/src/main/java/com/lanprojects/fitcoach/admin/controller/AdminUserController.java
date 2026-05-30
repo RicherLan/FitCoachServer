@@ -1,5 +1,7 @@
 package com.lanprojects.fitcoach.admin.controller;
 
+import com.lanprojects.fitcoach.admin.audit.AdminAuditAction;
+import com.lanprojects.fitcoach.admin.audit.AdminAuditLogService;
 import com.lanprojects.fitcoach.admin.dto.PageResponse;
 import com.lanprojects.fitcoach.admin.dto.UpdateUserStatusRequest;
 import com.lanprojects.fitcoach.admin.dto.UserDetailDto;
@@ -38,6 +40,7 @@ import org.springframework.web.bind.annotation.RestController;
 public class AdminUserController {
 
     private final AdminUserService adminUserService;
+    private final AdminAuditLogService auditLogService;
 
     /**
      * 分页查询用户
@@ -71,7 +74,20 @@ public class AdminUserController {
                                               @PathVariable("uid") String uid,
                                               @RequestBody(required = false) UpdateUserStatusRequest body) {
         String operator = (String) request.getAttribute(AdminAuthInterceptor.ATTR_ADMIN_USERNAME);
-        return Result.success(adminUserService.updateStatus(uid, body, operator));
+        Boolean enabled = body == null ? null : body.getEnabled();
+        AdminAuditAction action = Boolean.FALSE.equals(enabled)
+                ? AdminAuditAction.BAN_USER
+                : AdminAuditAction.UNBAN_USER;
+        try {
+            UserDetailDto result = adminUserService.updateStatus(uid, body, operator);
+            auditLogService.logSuccess(request, action, "USER", uid,
+                    "set enabled=" + enabled);
+            return Result.success(result);
+        } catch (RuntimeException e) {
+            auditLogService.logFailure(request, action, "USER", uid,
+                    "set enabled=" + enabled, e.getMessage());
+            throw e;
+        }
     }
 
     // ====== 内部 ======

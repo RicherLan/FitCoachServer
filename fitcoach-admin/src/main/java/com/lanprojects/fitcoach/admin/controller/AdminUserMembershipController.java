@@ -1,5 +1,7 @@
 package com.lanprojects.fitcoach.admin.controller;
 
+import com.lanprojects.fitcoach.admin.audit.AdminAuditAction;
+import com.lanprojects.fitcoach.admin.audit.AdminAuditLogService;
 import com.lanprojects.fitcoach.admin.dto.membership.AdminGrantMembershipRequest;
 import com.lanprojects.fitcoach.admin.dto.membership.AdminUserMembershipDto;
 import com.lanprojects.fitcoach.admin.security.AdminAuthInterceptor;
@@ -41,6 +43,7 @@ public class AdminUserMembershipController {
 
     private final MembershipService membershipService;
     private final UserRepository userRepository;
+    private final AdminAuditLogService auditLogService;
 
     /** 查单个用户的会员状态 */
     @GetMapping("/{uid}")
@@ -61,10 +64,19 @@ public class AdminUserMembershipController {
         String operator = (String) request.getAttribute(AdminAuthInterceptor.ATTR_ADMIN_USERNAME);
         // operatorOrderId 用 GIFT_<时间戳>_<操作员> 格式，落到 user_membership.last_order_id
         String operatorOrderId = "GIFT_" + System.currentTimeMillis() + "_" + (operator == null ? "admin" : operator);
-        membershipService.grantDays(user.getId(), body.getPlanCode(), body.getDays(), operatorOrderId);
-        log.info("[admin] {} 给用户 {} 赠送 {} 天会员（planCode={}, reason={}）",
-                operator, uid, body.getDays(), body.getPlanCode(), body.getReason());
-        return Result.success(buildDto(user));
+        String summary = String.format("grant %d days, planCode=%s, reason=%s",
+                body.getDays(), body.getPlanCode(), body.getReason());
+        try {
+            membershipService.grantDays(user.getId(), body.getPlanCode(), body.getDays(), operatorOrderId);
+            log.info("[admin] {} 给用户 {} 赠送 {} 天会员（planCode={}, reason={}）",
+                    operator, uid, body.getDays(), body.getPlanCode(), body.getReason());
+            auditLogService.logSuccess(request, AdminAuditAction.GRANT_MEMBERSHIP, "USER", uid, summary);
+            return Result.success(buildDto(user));
+        } catch (RuntimeException e) {
+            auditLogService.logFailure(request, AdminAuditAction.GRANT_MEMBERSHIP, "USER", uid,
+                    summary, e.getMessage());
+            throw e;
+        }
     }
 
     /** 立即撤销会员 */
@@ -75,9 +87,17 @@ public class AdminUserMembershipController {
         User user = userRepository.findByUid(uid)
                 .orElseThrow(() -> new BusinessException(ResultCode.USER_NOT_FOUND));
         String operator = (String) request.getAttribute(AdminAuthInterceptor.ATTR_ADMIN_USERNAME);
-        membershipService.revoke(user.getId());
-        log.info("[admin] {} 撤销用户 {} 的会员", operator, uid);
-        return Result.success(buildDto(user));
+        try {
+            membershipService.revoke(user.getId());
+            log.info("[admin] {} 撤销用户 {} 的会员", operator, uid);
+            auditLogService.logSuccess(request, AdminAuditAction.REVOKE_MEMBERSHIP, "USER", uid,
+                    "revoke membership");
+            return Result.success(buildDto(user));
+        } catch (RuntimeException e) {
+            auditLogService.logFailure(request, AdminAuditAction.REVOKE_MEMBERSHIP, "USER", uid,
+                    "revoke membership", e.getMessage());
+            throw e;
+        }
     }
 
     // ====== 内部 ======

@@ -1,5 +1,7 @@
 package com.lanprojects.fitcoach.admin.controller;
 
+import com.lanprojects.fitcoach.admin.audit.AdminAuditAction;
+import com.lanprojects.fitcoach.admin.audit.AdminAuditLogService;
 import com.lanprojects.fitcoach.admin.dto.musclegroup.AdminMuscleGroupDto;
 import com.lanprojects.fitcoach.admin.dto.musclegroup.AdminMuscleGroupRequest;
 import com.lanprojects.fitcoach.admin.security.AdminAuthInterceptor;
@@ -43,6 +45,7 @@ import java.util.List;
 public class AdminMuscleGroupController {
 
     private final MuscleGroupService muscleGroupService;
+    private final AdminAuditLogService auditLogService;
 
     /** 列表（含禁用），按 sortOrder 升序 */
     @GetMapping
@@ -65,9 +68,20 @@ public class AdminMuscleGroupController {
             HttpServletRequest request,
             @Validated(AdminMuscleGroupRequest.OnCreate.class) @RequestBody AdminMuscleGroupRequest body) {
         String operator = (String) request.getAttribute(AdminAuthInterceptor.ATTR_ADMIN_USERNAME);
-        MuscleGroupEntity saved = muscleGroupService.create(body.toCreateEntity());
-        log.info("[admin] {} 创建肌群 id={} key={}", operator, saved.getId(), saved.getGroupKey());
-        return Result.success(AdminMuscleGroupDto.from(saved));
+        try {
+            MuscleGroupEntity saved = muscleGroupService.create(body.toCreateEntity());
+            log.info("[admin] {} 创建肌群 id={} key={}", operator, saved.getId(), saved.getGroupKey());
+            auditLogService.logSuccess(request, AdminAuditAction.CREATE_MUSCLE_GROUP,
+                    "MUSCLE_GROUP", String.valueOf(saved.getId()),
+                    String.format("key=%s, displayName=%s, enabled=%s",
+                            saved.getGroupKey(), saved.getDisplayName(), saved.getEnabled()));
+            return Result.success(AdminMuscleGroupDto.from(saved));
+        } catch (RuntimeException e) {
+            auditLogService.logFailure(request, AdminAuditAction.CREATE_MUSCLE_GROUP,
+                    "MUSCLE_GROUP", null,
+                    String.format("key=%s", body.getGroupKey()), e.getMessage());
+            throw e;
+        }
     }
 
     /** 更新（PATCH 语义） */
@@ -77,10 +91,19 @@ public class AdminMuscleGroupController {
             @PathVariable("id") Long id,
             @Valid @RequestBody AdminMuscleGroupRequest body) {
         String operator = (String) request.getAttribute(AdminAuthInterceptor.ATTR_ADMIN_USERNAME);
-        MuscleGroupEntity updated = muscleGroupService.update(id, body.toPatchEntity());
-        log.info("[admin] {} 更新肌群 id={} key={} enabled={}",
-                operator, updated.getId(), updated.getGroupKey(), updated.getEnabled());
-        return Result.success(AdminMuscleGroupDto.from(updated));
+        try {
+            MuscleGroupEntity updated = muscleGroupService.update(id, body.toPatchEntity());
+            log.info("[admin] {} 更新肌群 id={} key={} enabled={}",
+                    operator, updated.getId(), updated.getGroupKey(), updated.getEnabled());
+            auditLogService.logSuccess(request, AdminAuditAction.UPDATE_MUSCLE_GROUP,
+                    "MUSCLE_GROUP", String.valueOf(id),
+                    String.format("key=%s, enabled=%s", updated.getGroupKey(), updated.getEnabled()));
+            return Result.success(AdminMuscleGroupDto.from(updated));
+        } catch (RuntimeException e) {
+            auditLogService.logFailure(request, AdminAuditAction.UPDATE_MUSCLE_GROUP,
+                    "MUSCLE_GROUP", String.valueOf(id), "patch update", e.getMessage());
+            throw e;
+        }
     }
 
     /** 一键启用/禁用（弱保护：禁用即可隐藏整个类目，不需要先迁移动作） */
@@ -90,19 +113,37 @@ public class AdminMuscleGroupController {
             @PathVariable("id") Long id,
             @RequestParam("value") boolean value) {
         String operator = (String) request.getAttribute(AdminAuthInterceptor.ATTR_ADMIN_USERNAME);
-        MuscleGroupEntity patch = new MuscleGroupEntity();
-        patch.setEnabled(value);
-        MuscleGroupEntity updated = muscleGroupService.update(id, patch);
-        log.info("[admin] {} 切换肌群 id={} 启用状态 → {}", operator, id, value);
-        return Result.success(AdminMuscleGroupDto.from(updated));
+        try {
+            MuscleGroupEntity patch = new MuscleGroupEntity();
+            patch.setEnabled(value);
+            MuscleGroupEntity updated = muscleGroupService.update(id, patch);
+            log.info("[admin] {} 切换肌群 id={} 启用状态 → {}", operator, id, value);
+            auditLogService.logSuccess(request, AdminAuditAction.UPDATE_MUSCLE_GROUP,
+                    "MUSCLE_GROUP", String.valueOf(id),
+                    String.format("toggle enabled=%s", value));
+            return Result.success(AdminMuscleGroupDto.from(updated));
+        } catch (RuntimeException e) {
+            auditLogService.logFailure(request, AdminAuditAction.UPDATE_MUSCLE_GROUP,
+                    "MUSCLE_GROUP", String.valueOf(id),
+                    String.format("toggle enabled=%s", value), e.getMessage());
+            throw e;
+        }
     }
 
     /** 硬删除（若仍有 Exercise 引用，会返回 7603 MUSCLE_GROUP_HAS_EXERCISES） */
     @DeleteMapping("/{id}")
     public Result<Void> delete(HttpServletRequest request, @PathVariable("id") Long id) {
         String operator = (String) request.getAttribute(AdminAuthInterceptor.ATTR_ADMIN_USERNAME);
-        muscleGroupService.delete(id);
-        log.info("[admin] {} 删除肌群 id={}", operator, id);
-        return Result.success(null);
+        try {
+            muscleGroupService.delete(id);
+            log.info("[admin] {} 删除肌群 id={}", operator, id);
+            auditLogService.logSuccess(request, AdminAuditAction.DELETE_MUSCLE_GROUP,
+                    "MUSCLE_GROUP", String.valueOf(id), "hard delete");
+            return Result.success(null);
+        } catch (RuntimeException e) {
+            auditLogService.logFailure(request, AdminAuditAction.DELETE_MUSCLE_GROUP,
+                    "MUSCLE_GROUP", String.valueOf(id), "hard delete", e.getMessage());
+            throw e;
+        }
     }
 }

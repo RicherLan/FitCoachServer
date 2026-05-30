@@ -20,7 +20,11 @@ import lombok.Setter;
 @Setter
 @NoArgsConstructor
 @Entity
-@Table(name = "sys_config")
+@Table(name = "sys_config", indexes = {
+        // config_key 已有 unique 约束（@Column unique=true）— 单列唯一 + 等值查询足够
+        // 按 config_group 分组查询（admin 后台分组展示用），加索引
+        @Index(name = "idx_sys_config_group", columnList = "config_group")
+})
 public class SysConfig extends BaseEntity {
 
     /**

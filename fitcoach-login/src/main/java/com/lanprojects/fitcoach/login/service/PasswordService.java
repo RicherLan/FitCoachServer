@@ -2,6 +2,7 @@ package com.lanprojects.fitcoach.login.service;
 
 import com.lanprojects.fitcoach.common.exception.BusinessException;
 import com.lanprojects.fitcoach.common.model.ResultCode;
+import com.lanprojects.fitcoach.common.security.LoginAttemptLimiter;
 import com.lanprojects.fitcoach.common.util.LogUtils;
 import com.lanprojects.fitcoach.login.dto.LoginResponse;
 import com.lanprojects.fitcoach.login.dto.SetPasswordRequest;
@@ -13,6 +14,7 @@ import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.time.Duration;
 import java.util.regex.Pattern;
 
 /**
@@ -49,41 +51,117 @@ public class PasswordService {
     private final OtpService otpService;
     private final AuthService authService;
 
+    // ====== 登录限流（本地 Caffeine 实现，单实例进程内有效） ======
+    // 跨实例不一致 —— 多副本部署需迁 Redis，当前 V1 单机够用。
+    // phone 维度防对单账号枚举密码；IP 维度防同 IP 撒网爆破多账号。
+    private static final int PHONE_MAX_ATTEMPTS = 5;
+    private static final int IP_MAX_ATTEMPTS = 20;
+    private static final Duration ATTEMPT_WINDOW = Duration.ofMinutes(15);
+
+    private final LoginAttemptLimiter phoneLimiter =
+            new LoginAttemptLimiter(PHONE_MAX_ATTEMPTS, ATTEMPT_WINDOW, 100_000);
+    private final LoginAttemptLimiter ipLimiter =
+            new LoginAttemptLimiter(IP_MAX_ATTEMPTS, ATTEMPT_WINDOW, 50_000);
+
     /**
-     * 密码登录（手机号 + 密码）
-     * <p>校验失败一律回 {@link ResultCode#PASSWORD_LOGIN_FAILED}，避免泄露账号是否存在 / 是否设置过密码。
+     * 密码登录（手机号 + 密码），不带 clientIp 兼容旧调用（仅做 phone 维度限流）。
+     *
+     * @deprecated 业务方请改用 {@link #login(String, String, String)} 同时传入 IP，启用 IP 维度限流。
+     */
+    @Deprecated
+    public LoginResponse login(String phone, String password) {
+        return login(phone, password, null);
+    }
+
+    /**
+     * 密码登录（手机号 + 密码 + 客户端 IP）。
+     *
+     * <p><b>限流策略</b>（{@link LoginAttemptLimiter}，本地 Caffeine 单实例）：
+     * <ul>
+     *   <li>phone 维度：{@value #PHONE_MAX_ATTEMPTS} 次失败 / {@code ATTEMPT_WINDOW}；</li>
+     *   <li>IP 维度：{@value #IP_MAX_ATTEMPTS} 次失败 / {@code ATTEMPT_WINDOW}；</li>
+     *   <li>超限抛 {@link ResultCode#PASSWORD_LOGIN_RATE_LIMITED}（不告知是哪一维度，避免攻击者按维度规避）；</li>
+     *   <li>登录成功后<b>只</b>清零 phone 维度计数（防止单点突破后用同 IP 爆破其他账号）。</li>
+     * </ul>
+     *
+     * <p><b>校验失败</b>一律回 {@link ResultCode#PASSWORD_LOGIN_FAILED}，避免泄露"账号是否存在 / 是否设置过密码"。
+     *
+     * @param phone     手机号（用于 phone 维度限流 key + DB 查询）
+     * @param password  明文密码（BCrypt 比对，本方法不落任何日志）
+     * @param clientIp  客户端真实 IP；可传 null，传 null 时跳过 IP 维度限流
      */
     @Transactional
-    public LoginResponse login(String phone, String password) {
-        User user = userRepository.findByPhone(phone)
-                .orElseThrow(() -> {
-                    log.info("密码登录失败：手机号不存在, phone={}", LogUtils.mask(phone));
-                    return new BusinessException(ResultCode.PASSWORD_LOGIN_FAILED);
-                });
-
-        if (!Boolean.TRUE.equals(user.getEnabled())) {
-            log.warn("密码登录失败：账号已禁用, uid={}", user.getUid());
-            throw new BusinessException(ResultCode.USER_DISABLED);
+    public LoginResponse login(String phone, String password, String clientIp) {
+        // 1) 限流预检 —— 在 DB 查询之前先挡掉，避免暴力请求把 DB 打满
+        if (phone != null && !phone.isBlank() && !phoneLimiter.isAllowed(phone)) {
+            log.warn("密码登录被限流（phone 维度）, phone={}", LogUtils.mask(phone));
+            throw new BusinessException(ResultCode.PASSWORD_LOGIN_RATE_LIMITED);
+        }
+        if (clientIp != null && !clientIp.isBlank() && !ipLimiter.isAllowed(clientIp)) {
+            log.warn("密码登录被限流（IP 维度）, ip={}", LogUtils.mask(clientIp));
+            throw new BusinessException(ResultCode.PASSWORD_LOGIN_RATE_LIMITED);
         }
 
-        String hash = user.getPasswordHash();
-        if (hash == null || hash.isBlank()) {
-            log.info("密码登录失败：未设置密码, uid={}", user.getUid());
-            // 同样回 LOGIN_FAILED 而不是 PASSWORD_NOT_SET：未登录态没法证明账号属主，告诉对方"该手机号未设密码"
-            // 等于帮攻击者枚举哪些手机号是新用户，反过来又能用 OTP 流程接管
-            throw new BusinessException(ResultCode.PASSWORD_LOGIN_FAILED);
-        }
+        try {
+            User user = userRepository.findByPhone(phone)
+                    .orElseThrow(() -> {
+                        log.info("密码登录失败：手机号不存在, phone={}", LogUtils.mask(phone));
+                        return new BusinessException(ResultCode.PASSWORD_LOGIN_FAILED);
+                    });
 
-        if (!passwordEncoder.matches(password, hash)) {
-            log.info("密码登录失败：密码错误, uid={}", user.getUid());
-            throw new BusinessException(ResultCode.PASSWORD_LOGIN_FAILED);
-        }
+            if (!Boolean.TRUE.equals(user.getEnabled())) {
+                log.warn("密码登录失败：账号已禁用, uid={}", user.getUid());
+                // 账号禁用不计入"密码错误"配额（这条本就不能登录，记了也没意义；
+                // 但会让攻击者通过观测计数差异判断账号是否存在 → 反而提供枚举信号）
+                throw new BusinessException(ResultCode.USER_DISABLED);
+            }
 
-        // 校验通过 → 复用 AuthService.phoneLogin 的"老用户登录"路径颁 token
-        // 注意：这里不能复用 phoneLogin 整体（它会 findOrCreate，密码登录不应自动创号）
-        // 所以走 buildLoginResponse 等价路径：直接走 authService 颁 token
-        log.info("密码登录成功, uid={}, phone={}", user.getUid(), LogUtils.mask(phone));
-        return authService.phoneLogin(phone);
+            String hash = user.getPasswordHash();
+            if (hash == null || hash.isBlank()) {
+                log.info("密码登录失败：未设置密码, uid={}", user.getUid());
+                // 同样回 LOGIN_FAILED 而不是 PASSWORD_NOT_SET：未登录态没法证明账号属主，告诉对方"该手机号未设密码"
+                // 等于帮攻击者枚举哪些手机号是新用户，反过来又能用 OTP 流程接管
+                throw new BusinessException(ResultCode.PASSWORD_LOGIN_FAILED);
+            }
+
+            if (!passwordEncoder.matches(password, hash)) {
+                log.info("密码登录失败：密码错误, uid={}", user.getUid());
+                throw new BusinessException(ResultCode.PASSWORD_LOGIN_FAILED);
+            }
+
+            // 校验通过 → 复用 AuthService.phoneLogin 的"老用户登录"路径颁 token
+            // 注意：这里不能复用 phoneLogin 整体（它会 findOrCreate，密码登录不应自动创号）
+            // 所以走 buildLoginResponse 等价路径：直接走 authService 颁 token
+            LoginResponse resp = authService.phoneLogin(phone);
+            // 登录成功 → 清零 phone 维度计数；IP 维度故意保留，防止单点突破后爆破其他账号
+            phoneLimiter.reset(phone);
+            log.info("密码登录成功, uid={}, phone={}", user.getUid(), LogUtils.mask(phone));
+            return resp;
+        } catch (BusinessException e) {
+            // 仅对"密码错误"类失败累计配额；账号禁用、限流自身不再加权（避免被攻击者利用做 DoS）
+            if (e.getCode() == ResultCode.PASSWORD_LOGIN_FAILED.getCode()) {
+                recordFailure(phone, clientIp);
+            }
+            throw e;
+        }
+    }
+
+    /** 累加双维度失败计数；任一为空 key 时静默跳过该维度。 */
+    private void recordFailure(String phone, String clientIp) {
+        if (phone != null && !phone.isBlank()) {
+            int after = phoneLimiter.recordFailure(phone);
+            if (after >= PHONE_MAX_ATTEMPTS) {
+                log.warn("密码登录失败次数达上限（phone 维度）, phone={}, count={}/{}",
+                        LogUtils.mask(phone), after, PHONE_MAX_ATTEMPTS);
+            }
+        }
+        if (clientIp != null && !clientIp.isBlank()) {
+            int after = ipLimiter.recordFailure(clientIp);
+            if (after >= IP_MAX_ATTEMPTS) {
+                log.warn("密码登录失败次数达上限（IP 维度）, ip={}, count={}/{}",
+                        LogUtils.mask(clientIp), after, IP_MAX_ATTEMPTS);
+            }
+        }
     }
 
     /**

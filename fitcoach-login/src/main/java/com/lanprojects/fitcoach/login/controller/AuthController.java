@@ -3,6 +3,7 @@ package com.lanprojects.fitcoach.login.controller;
 import com.lanprojects.fitcoach.common.exception.BusinessException;
 import com.lanprojects.fitcoach.common.model.Result;
 import com.lanprojects.fitcoach.common.model.ResultCode;
+import com.lanprojects.fitcoach.common.security.ClientIpResolver;
 import com.lanprojects.fitcoach.login.dto.LoginResponse;
 import com.lanprojects.fitcoach.login.dto.PasswordLoginRequest;
 import com.lanprojects.fitcoach.login.dto.PhoneLoginRequest;
@@ -88,8 +89,13 @@ public class AuthController {
      * 校验失败统一回 7401 PASSWORD_LOGIN_FAILED，避免泄露"账号是否存在 / 是否设置过密码"。
      */
     @PostMapping("/login/password")
-    public Result<LoginResponse> passwordLogin(@Valid @RequestBody PasswordLoginRequest request) {
-        return Result.success(passwordService.login(request.getPhone(), request.getPassword()));
+    public Result<LoginResponse> passwordLogin(
+            @Valid @RequestBody PasswordLoginRequest request,
+            HttpServletRequest httpRequest) {
+        // 透传 IP 进入 PasswordService → 启用 phone + IP 双维度本地限流，
+        // 防止单账号枚举密码 / 同 IP 撒网爆破多账号。
+        String clientIp = ClientIpResolver.resolve(httpRequest);
+        return Result.success(passwordService.login(request.getPhone(), request.getPassword(), clientIp));
     }
 
     /**
@@ -163,20 +169,9 @@ public class AuthController {
     }
 
     /**
-     * 取真实客户端 IP —— 优先取反向代理头，避免拿到所有请求都是 LB 的内网 IP。
-     * <p>注意：生产环境必须确保上游是可信代理（如 Nginx），否则 X-Forwarded-For 可被伪造。
+     * 取真实客户端 IP —— 已抽到 {@link ClientIpResolver}（common-security），此处保留薄包装便于内部调用。
      */
     private String getClientIp(HttpServletRequest request) {
-        String ip = request.getHeader("X-Forwarded-For");
-        if (ip != null && !ip.isBlank()) {
-            // X-Forwarded-For 可能含多个 IP，第一个是客户端真实 IP
-            int comma = ip.indexOf(',');
-            return (comma > 0 ? ip.substring(0, comma) : ip).trim();
-        }
-        ip = request.getHeader("X-Real-IP");
-        if (ip != null && !ip.isBlank()) {
-            return ip.trim();
-        }
-        return request.getRemoteAddr();
+        return ClientIpResolver.resolve(request);
     }
 }

@@ -123,9 +123,10 @@ public class WeChatCallbackHandler {
             String outTradeNo = (String) transaction.get("out_trade_no");
             String transactionId = (String) transaction.get("transaction_id");
             String tradeState = (String) transaction.get("trade_state");
+            Long paidAmountCents = extractPaidAmountCents(transaction);
 
-            log.info("[wechat-pay] 回调交易信息 out_trade_no={} transaction_id={} trade_state={}",
-                    outTradeNo, transactionId, tradeState);
+            log.info("[wechat-pay] 回调交易信息 out_trade_no={} transaction_id={} trade_state={} amountCents={}",
+                    outTradeNo, transactionId, tradeState, paidAmountCents);
 
             if (!"SUCCESS".equals(tradeState)) {
                 log.warn("[wechat-pay] 交易状态非 SUCCESS，忽略 tradeState={} orderId={}",
@@ -138,9 +139,18 @@ public class WeChatCallbackHandler {
                 return false;
             }
 
-            // 5. 标记订单已支付（幂等 — markPaid 内部处理重复调用）
-            paymentService.markPaid(outTradeNo, null, transactionId);
-            log.info("[wechat-pay] 订单标记支付成功 orderId={} transactionId={}", outTradeNo, transactionId);
+            if (paidAmountCents == null) {
+                // amount.total 缺失通常意味着回调体结构异常 — 拒绝处理让微信重试，并触发告警
+                log.error("[wechat-pay] 回调缺少 amount.total，拒绝处理 orderId={}", outTradeNo);
+                return false;
+            }
+
+            // 5. 标记订单已支付（带金额校验 — markPaid 内部对 PENDING 状态做幂等处理，
+            //    金额不匹配会抛 PAYMENT_ORDER_AMOUNT_MISMATCH 让本回调返回 SUCCESS ack
+            //    但订单留在 PENDING 等待人工核查，避免微信无限重试相同的金额异常请求）
+            paymentService.markPaid(outTradeNo, null, transactionId, paidAmountCents);
+            log.info("[wechat-pay] 订单标记支付成功 orderId={} transactionId={} amountCents={}",
+                    outTradeNo, transactionId, paidAmountCents);
             return true;
 
         } catch (BusinessException be) {
@@ -151,6 +161,32 @@ public class WeChatCallbackHandler {
             log.error("[wechat-pay] 回调处理异常", e);
             return false; // 返回 FAIL，微信会重试
         }
+    }
+
+    /**
+     * 从解密后的交易数据中提取实付金额（单位：分）。
+     * <p>微信 V3 回调结构：{@code amount: { total: 100, payer_total: 100, currency: "CNY" }}
+     * 这里取 {@code total}（订单总金额），不取 {@code payer_total}（用户实付，可能因优惠券差异）。
+     *
+     * @return 金额（分），无法解析时返回 null（调用方负责处理）
+     */
+    private Long extractPaidAmountCents(Map<String, Object> transaction) {
+        Object amountObj = transaction.get("amount");
+        if (!(amountObj instanceof Map<?, ?> amountMap)) {
+            return null;
+        }
+        Object total = amountMap.get("total");
+        if (total instanceof Number num) {
+            return num.longValue();
+        }
+        if (total instanceof String s && !s.isBlank()) {
+            try {
+                return Long.parseLong(s.trim());
+            } catch (NumberFormatException e) {
+                log.warn("[wechat-pay] amount.total 字段无法解析为 long total={}", s);
+            }
+        }
+        return null;
     }
 
     /**

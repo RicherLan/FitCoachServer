@@ -60,6 +60,13 @@ public class FeedbackService {
             log.warn("反馈附件超大, uid={}, size={}, max={}", uid, file.getSize(), cfg.getMaxSizeBytes());
             throw new BusinessException(ResultCode.FEEDBACK_ATTACHMENT_FILE_TOO_LARGE);
         }
+        // 校验真实 magic number — 防止客户端伪造 Content-Type 把 exe / apk 当图片传上来
+        if (!com.lanprojects.fitcoach.common.upload.FileMagicValidator
+                .matchesContentType(file, contentType)) {
+            log.warn("反馈附件 magic number 与 contentType 不匹配（疑似伪造）, uid={}, contentType={}, size={}",
+                    uid, contentType, file.getSize());
+            throw new BusinessException(ResultCode.FEEDBACK_ATTACHMENT_CONTENT_TYPE_INVALID);
+        }
 
         String url = attachmentStorageService.saveAttachment(uid, file);
         return new UploadAttachmentResponse(url);

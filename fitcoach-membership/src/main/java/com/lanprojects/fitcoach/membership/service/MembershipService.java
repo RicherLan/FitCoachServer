@@ -3,8 +3,11 @@ package com.lanprojects.fitcoach.membership.service;
 import com.lanprojects.fitcoach.common.event.PaymentSucceededEvent;
 import com.lanprojects.fitcoach.common.exception.BusinessException;
 import com.lanprojects.fitcoach.common.model.ResultCode;
+import com.lanprojects.fitcoach.membership.entity.MembershipActivationFailure;
+import com.lanprojects.fitcoach.membership.entity.MembershipActivationFailure.Status;
 import com.lanprojects.fitcoach.membership.entity.MembershipPlan;
 import com.lanprojects.fitcoach.membership.entity.UserMembership;
+import com.lanprojects.fitcoach.membership.repository.MembershipActivationFailureRepository;
 import com.lanprojects.fitcoach.membership.repository.MembershipPlanRepository;
 import com.lanprojects.fitcoach.membership.repository.UserMembershipRepository;
 import lombok.RequiredArgsConstructor;
@@ -12,6 +15,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.context.event.EventListener;
 import org.springframework.scheduling.annotation.Async;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.transaction.event.TransactionPhase;
 import org.springframework.transaction.event.TransactionalEventListener;
@@ -44,6 +48,13 @@ public class MembershipService {
 
     private final MembershipPlanRepository planRepository;
     private final UserMembershipRepository membershipRepository;
+    private final MembershipActivationFailureRepository activationFailureRepository;
+
+    /** 首次失败后多久重试（毫秒） — 后续重试按指数退避 */
+    private static final long INITIAL_BACKOFF_MS = 60_000L; // 1 分钟
+    private static final long MAX_BACKOFF_MS = 3600_000L;   // 1 小时上限
+    /** 超过该次数标记 PERMANENT_FAIL — 留给人工 */
+    public static final int MAX_RETRY_COUNT = 10;
 
     // ====== 会员状态查询 ======
 
@@ -129,10 +140,101 @@ public class MembershipService {
             activate(event.getUserId(), event.getPlanCode(), event.getOrderId());
         } catch (Exception e) {
             // 监听器异常不能扩散：扩散会让 Spring 误判事件传播失败，但 payment 事务已经 commit
-            // 如果激活失败需要补偿（人工或定时任务），不阻塞主流程
-            log.error("[membership] 激活会员失败 orderId={} userId={} planCode={}",
+            // 如果激活失败 → 写入失败记录表，由 MembershipActivationRetryJob 周期重试，避免静默丢失资损
+            log.error("[membership] 激活会员失败，已记录待补偿 orderId={} userId={} planCode={}",
                     event.getOrderId(), event.getUserId(), event.getPlanCode(), e);
+            try {
+                recordActivationFailure(event, e);
+            } catch (Exception persistEx) {
+                // 兜底再兜底：连失败表都写不进去 — 只能依赖 P0-2 的 MembershipReconcileJob 扫订单兜底
+                log.error("[membership] 写入 activation_failure 记录也失败 orderId={}",
+                        event.getOrderId(), persistEx);
+            }
         }
+    }
+
+    /**
+     * 把激活失败的事件落地到 {@code membership_activation_failure}，供 retry job 周期重试。
+     * <p>单独开事务（{@code REQUIRES_NEW}）：当前监听器无事务上下文（@Async 切线程），
+     * 但插入失败记录这个写操作本身需要事务保证。
+     */
+    @Transactional(propagation = Propagation.REQUIRES_NEW)
+    public void recordActivationFailure(PaymentSucceededEvent event, Throwable cause) {
+        String reason = truncate(cause == null ? "unknown" : cause.toString(), 1024);
+        // 同一 orderId 可能多次落入此分支（事件重投/补偿任务并行），upsert 一下
+        MembershipActivationFailure failure = activationFailureRepository
+                .findByOrderId(event.getOrderId())
+                .orElseGet(MembershipActivationFailure::new);
+
+        if (failure.getId() == null) {
+            // 新记录
+            failure.setOrderId(event.getOrderId());
+            failure.setUserId(event.getUserId());
+            failure.setPlanCode(event.getPlanCode());
+            failure.setStatus(Status.PENDING);
+            failure.setRetryCount(1);
+            failure.setNextRetryAt(LocalDateTime.now().plusNanos(INITIAL_BACKOFF_MS * 1_000_000L));
+        } else if (failure.getStatus() == Status.PENDING) {
+            // 重复失败 — 增量并按指数退避推后下次重试
+            failure.setRetryCount(failure.getRetryCount() + 1);
+            failure.setNextRetryAt(LocalDateTime.now().plusNanos(
+                    computeBackoffMs(failure.getRetryCount()) * 1_000_000L));
+            if (failure.getRetryCount() >= MAX_RETRY_COUNT) {
+                failure.setStatus(Status.PERMANENT_FAIL);
+                log.error("[membership] 激活失败重试 {} 次仍未成功，标记 PERMANENT_FAIL orderId={}",
+                        MAX_RETRY_COUNT, event.getOrderId());
+            }
+        }
+        failure.setLastFailReason(reason);
+        activationFailureRepository.save(failure);
+    }
+
+    /**
+     * 由 retry job 调用 — 尝试重新激活并更新 failure 记录状态。
+     * <p>成功 → status=SUCCESS + resolvedAt；失败 → 走 {@link #recordActivationFailure} 同一指数退避逻辑。
+     */
+    public void retryActivation(MembershipActivationFailure failure) {
+        try {
+            activate(failure.getUserId(), failure.getPlanCode(), failure.getOrderId());
+            markActivationFailureResolved(failure.getId());
+            log.info("[membership] 补偿激活成功 orderId={} userId={} (第 {} 次尝试)",
+                    failure.getOrderId(), failure.getUserId(), failure.getRetryCount() + 1);
+        } catch (Exception e) {
+            log.warn("[membership] 补偿激活失败 orderId={} retryCount={} reason={}",
+                    failure.getOrderId(), failure.getRetryCount(), e.toString());
+            // 复用 record 逻辑做退避 / PERMANENT_FAIL 转换
+            PaymentSucceededEvent pseudoEvent = PaymentSucceededEvent.builder()
+                    .orderId(failure.getOrderId())
+                    .userId(failure.getUserId())
+                    .planCode(failure.getPlanCode())
+                    .build();
+            try {
+                recordActivationFailure(pseudoEvent, e);
+            } catch (Exception persistEx) {
+                log.error("[membership] 更新 activation_failure 记录失败 orderId={}",
+                        failure.getOrderId(), persistEx);
+            }
+        }
+    }
+
+    @Transactional(propagation = Propagation.REQUIRES_NEW)
+    public void markActivationFailureResolved(Long failureId) {
+        activationFailureRepository.findById(failureId).ifPresent(f -> {
+            f.setStatus(Status.SUCCESS);
+            f.setResolvedAt(LocalDateTime.now());
+            activationFailureRepository.save(f);
+        });
+    }
+
+    /** 指数退避：1min, 2min, 4min, ..., 上限 60min */
+    private long computeBackoffMs(int retryCount) {
+        long backoff = INITIAL_BACKOFF_MS * (1L << Math.min(retryCount - 1, 10));
+        return Math.min(backoff, MAX_BACKOFF_MS);
+    }
+
+    private String truncate(String s, int maxLen) {
+        if (s == null) return null;
+        return s.length() <= maxLen ? s : s.substring(0, maxLen);
     }
 
     /**

@@ -159,6 +159,26 @@ public class PaymentService {
      */
     @Transactional
     public void markPaid(String orderId, String channelPrepayId, String channelTransactionId) {
+        markPaid(orderId, channelPrepayId, channelTransactionId, null);
+    }
+
+    /**
+     * 带金额校验的 markPaid 重载 — 用于真实支付通道回调（如微信、支付宝）。
+     *
+     * <p><b>金额校验</b>：当 {@code paidAmountCents != null} 时，会校验回调金额与订单金额一致；
+     * 不一致直接抛 {@link ResultCode#PAYMENT_ORDER_AMOUNT_MISMATCH} 并打 ERROR 日志，
+     * 订单状态保持 PENDING（让微信重试或人工核查），<b>避免少付钱被静默放行的资损风险</b>。
+     *
+     * <p>Mock provider / 测试场景可继续用单参版本（透传 null 跳过校验）。
+     *
+     * @param orderId              业务订单号
+     * @param channelPrepayId      通道预支付号（微信 prepay_id），可空
+     * @param channelTransactionId 通道凭证号（微信 transaction_id / Apple transaction_id），可空
+     * @param paidAmountCents      通道回传的实付金额（单位：分）；null 表示跳过金额校验
+     */
+    @Transactional
+    public void markPaid(String orderId, String channelPrepayId, String channelTransactionId,
+                          Long paidAmountCents) {
         PaymentOrder order = orderRepository.findByOrderId(orderId)
                 .orElseThrow(() -> new BusinessException(ResultCode.PAYMENT_ORDER_NOT_FOUND));
 
@@ -169,6 +189,14 @@ public class PaymentService {
         if (order.getStatus() != OrderStatus.PENDING) {
             throw new BusinessException(ResultCode.PAYMENT_ORDER_STATUS_INVALID,
                     "订单状态不允许标记为已支付：" + order.getStatus());
+        }
+
+        // 金额校验（仅当通道回传金额时才校验，Mock 场景透传 null 跳过）
+        if (paidAmountCents != null && !paidAmountCents.equals(order.getAmountCents())) {
+            log.error("[payment] ⚠️ 订单金额校验失败！orderId={} expectedCents={} paidCents={} channel={}" +
+                            " — 拒绝标记支付，订单保持 PENDING 等待人工核查",
+                    orderId, order.getAmountCents(), paidAmountCents, order.getChannel());
+            throw new BusinessException(ResultCode.PAYMENT_ORDER_AMOUNT_MISMATCH);
         }
 
         order.setStatus(OrderStatus.PAID);
@@ -188,8 +216,8 @@ public class PaymentService {
                 .paidAt(order.getPaidAt())
                 .build());
 
-        log.info("[payment] 订单标记已支付 orderId={} userId={} channel={} 已发布事件",
-                orderId, order.getUserId(), order.getChannel());
+        log.info("[payment] 订单标记已支付 orderId={} userId={} channel={} amountCents={} 已发布事件",
+                orderId, order.getUserId(), order.getChannel(), order.getAmountCents());
     }
 
     /**

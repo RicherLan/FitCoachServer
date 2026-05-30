@@ -75,8 +75,10 @@ public class AdminDataInitializer implements CommandLineRunner {
         admin.setRole(AdminRole.SUPER_ADMIN);
         admin.setEnabled(true);
         adminUserRepository.save(admin);
-        log.warn("已创建默认超级管理员账号 username={} password={}（请立即登录后台修改密码！）",
-                DEFAULT_USERNAME, DEFAULT_PASSWORD);
+        // 安全合规：不在日志里输出 password 字面值，即使是默认密码 — 避免日志聚合系统误判 / 残留
+        log.warn("已创建默认超级管理员账号 username={}（默认密码请查阅 README 中 'Admin 默认账号' 章节，" +
+                        "请立即登录后台修改密码，否则非 dev profile 启动会被拒绝！）",
+                DEFAULT_USERNAME);
     }
 
     /**
@@ -98,15 +100,15 @@ public class AdminDataInitializer implements CommandLineRunner {
         boolean bypass = "true".equalsIgnoreCase(System.getenv(BYPASS_ENV_NAME));
 
         if (devProfile) {
-            log.warn("⚠️ [DEV] 检测到默认管理员 {} 仍使用默认密码 admin123，仅在 dev profile 下允许，上线前必改！",
+            log.warn("⚠️ [DEV] 检测到默认管理员 {} 仍使用初始默认密码，仅在 dev profile 下允许，上线前必改！",
                     DEFAULT_USERNAME);
             return;
         }
 
         log.error("========================================================================");
-        log.error("⚠️  严重安全风险：默认管理员账号 ({}) 仍在使用默认密码 admin123！", DEFAULT_USERNAME);
+        log.error("⚠️  严重安全风险：默认管理员账号 ({}) 仍在使用初始默认密码！", DEFAULT_USERNAME);
         log.error("    当前 profile: {}", Arrays.toString(environment.getActiveProfiles()));
-        log.error("    请立即用默认账号登录后台修改密码后再启动服务。");
+        log.error("    请立即用初始默认账号登录后台修改密码后再启动服务。");
         log.error("    如确需在生产临时跳过此检查（不推荐），请设置环境变量 {}=true", BYPASS_ENV_NAME);
         log.error("========================================================================");
 

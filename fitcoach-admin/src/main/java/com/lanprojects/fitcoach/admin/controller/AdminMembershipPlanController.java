@@ -1,10 +1,13 @@
 package com.lanprojects.fitcoach.admin.controller;
 
+import com.lanprojects.fitcoach.admin.audit.AdminAuditAction;
+import com.lanprojects.fitcoach.admin.audit.AdminAuditLogService;
 import com.lanprojects.fitcoach.admin.dto.membership.AdminPlanDto;
 import com.lanprojects.fitcoach.admin.dto.membership.AdminPlanRequest;
 import com.lanprojects.fitcoach.common.model.Result;
 import com.lanprojects.fitcoach.membership.entity.MembershipPlan;
 import com.lanprojects.fitcoach.membership.service.MembershipService;
+import jakarta.servlet.http.HttpServletRequest;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -35,6 +38,7 @@ import java.util.List;
 public class AdminMembershipPlanController {
 
     private final MembershipService membershipService;
+    private final AdminAuditLogService auditLogService;
 
     /** 套餐列表（含禁用，按 sortOrder 升序） */
     @GetMapping
@@ -53,28 +57,43 @@ public class AdminMembershipPlanController {
     /** 创建套餐 */
     @PostMapping
     public Result<AdminPlanDto> create(
+            HttpServletRequest request,
             @Validated(AdminPlanRequest.OnCreate.class) @RequestBody AdminPlanRequest req) {
         MembershipPlan saved = membershipService.createPlan(req.toEntity());
+        auditLogService.logSuccess(request, AdminAuditAction.CREATE_MEMBERSHIP_PLAN,
+                "PLAN", saved.getPlanCode(),
+                String.format("planCode=%s, priceCny=%s, priceUsdCents=%s, durationDays=%s, enabled=%s",
+                        saved.getPlanCode(), saved.getPriceCny(), saved.getPriceUsdCents(),
+                        saved.getDurationDays(), saved.getEnabled()));
         return Result.success(AdminPlanDto.from(saved));
     }
 
     /** 更新套餐（PATCH 语义） */
     @PatchMapping("/{id}")
     public Result<AdminPlanDto> update(
+            HttpServletRequest request,
             @PathVariable("id") Long id,
             @Valid @RequestBody AdminPlanRequest req) {
         MembershipPlan saved = membershipService.updatePlan(id, req.toPatchEntity());
+        auditLogService.logSuccess(request, AdminAuditAction.UPDATE_MEMBERSHIP_PLAN,
+                "PLAN", String.valueOf(id),
+                String.format("planCode=%s, priceCny=%s, priceUsdCents=%s, enabled=%s",
+                        saved.getPlanCode(), saved.getPriceCny(), saved.getPriceUsdCents(), saved.getEnabled()));
         return Result.success(AdminPlanDto.from(saved));
     }
 
     /** 上下架（不删除） */
     @PostMapping("/{id}/toggle")
     public Result<AdminPlanDto> toggle(
+            HttpServletRequest request,
             @PathVariable("id") Long id,
             @RequestParam("enabled") boolean enabled) {
         MembershipPlan patch = new MembershipPlan();
         patch.setEnabled(enabled);
         MembershipPlan saved = membershipService.updatePlan(id, patch);
+        auditLogService.logSuccess(request, AdminAuditAction.UPDATE_MEMBERSHIP_PLAN,
+                "PLAN", String.valueOf(id),
+                String.format("toggle enabled=%s, planCode=%s", enabled, saved.getPlanCode()));
         return Result.success(AdminPlanDto.from(saved));
     }
 }

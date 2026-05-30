@@ -1,5 +1,7 @@
 package com.lanprojects.fitcoach.admin.controller;
 
+import com.lanprojects.fitcoach.admin.audit.AdminAuditAction;
+import com.lanprojects.fitcoach.admin.audit.AdminAuditLogService;
 import com.lanprojects.fitcoach.admin.dto.appversion.AdminAppVersionDto;
 import com.lanprojects.fitcoach.admin.dto.appversion.AdminAppVersionRequest;
 import com.lanprojects.fitcoach.admin.security.AdminAuthInterceptor;
@@ -46,6 +48,7 @@ import java.util.List;
 public class AdminAppVersionController {
 
     private final AppVersionService appVersionService;
+    private final AdminAuditLogService auditLogService;
 
     /**
      * 列表。
@@ -77,6 +80,10 @@ public class AdminAppVersionController {
         AppVersionEntity saved = appVersionService.create(body.toCreateEntity());
         log.info("[admin] {} 创建版本 id={} platform={} versionName={} versionCode={}",
                 operator, saved.getId(), saved.getPlatform(), saved.getVersionName(), saved.getVersionCode());
+        auditLogService.logSuccess(request, AdminAuditAction.CREATE_APP_VERSION,
+                "APP_VERSION", String.valueOf(saved.getId()),
+                String.format("platform=%s, versionName=%s, versionCode=%s, isPublished=%s",
+                        saved.getPlatform(), saved.getVersionName(), saved.getVersionCode(), saved.getIsPublished()));
         return Result.success(AdminAppVersionDto.from(saved));
     }
 
@@ -90,6 +97,10 @@ public class AdminAppVersionController {
         AppVersionEntity updated = appVersionService.update(id, body.toPatchEntity());
         log.info("[admin] {} 更新版本 id={} platform={} versionCode={} isPublished={}",
                 operator, updated.getId(), updated.getPlatform(), updated.getVersionCode(), updated.getIsPublished());
+        auditLogService.logSuccess(request, AdminAuditAction.UPDATE_APP_VERSION,
+                "APP_VERSION", String.valueOf(id),
+                String.format("platform=%s, versionCode=%s, isPublished=%s",
+                        updated.getPlatform(), updated.getVersionCode(), updated.getIsPublished()));
         return Result.success(AdminAppVersionDto.from(updated));
     }
 
@@ -104,6 +115,10 @@ public class AdminAppVersionController {
         patch.setIsPublished(value);
         AppVersionEntity updated = appVersionService.update(id, patch);
         log.info("[admin] {} 切换版本 id={} 发布状态 → {}", operator, id, value);
+        auditLogService.logSuccess(request, AdminAuditAction.UPDATE_APP_VERSION,
+                "APP_VERSION", String.valueOf(id),
+                String.format("toggle isPublished=%s, platform=%s, versionCode=%s",
+                        value, updated.getPlatform(), updated.getVersionCode()));
         return Result.success(AdminAppVersionDto.from(updated));
     }
 
@@ -113,6 +128,8 @@ public class AdminAppVersionController {
         String operator = (String) request.getAttribute(AdminAuthInterceptor.ATTR_ADMIN_USERNAME);
         appVersionService.delete(id);
         log.info("[admin] {} 删除版本 id={}", operator, id);
+        auditLogService.logSuccess(request, AdminAuditAction.DELETE_APP_VERSION,
+                "APP_VERSION", String.valueOf(id), "hard delete");
         return Result.success(null);
     }
 }

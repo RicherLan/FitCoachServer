@@ -1,5 +1,7 @@
 package com.lanprojects.fitcoach.admin.controller;
 
+import com.lanprojects.fitcoach.admin.audit.AdminAuditAction;
+import com.lanprojects.fitcoach.admin.audit.AdminAuditLogService;
 import com.lanprojects.fitcoach.admin.dto.FeedbackDetailDto;
 import com.lanprojects.fitcoach.admin.dto.FeedbackSummaryDto;
 import com.lanprojects.fitcoach.admin.dto.PageResponse;
@@ -38,6 +40,7 @@ import org.springframework.web.bind.annotation.RestController;
 public class AdminFeedbackController {
 
     private final AdminFeedbackService adminFeedbackService;
+    private final AdminAuditLogService auditLogService;
 
     /**
      * 分页查询反馈
@@ -74,7 +77,21 @@ public class AdminFeedbackController {
                                                   @PathVariable("id") Long id,
                                                   @RequestBody(required = false) UpdateFeedbackStatusRequest body) {
         String operator = (String) request.getAttribute(AdminAuthInterceptor.ATTR_ADMIN_USERNAME);
-        return Result.success(adminFeedbackService.updateStatus(id, body, operator));
+        try {
+            FeedbackDetailDto detail = adminFeedbackService.updateStatus(id, body, operator);
+            String newStatus = body != null && body.getStatus() != null ? body.getStatus().name() : "(unchanged)";
+            boolean hasReply = body != null && body.getHandlerReply() != null && !body.getHandlerReply().isBlank();
+            auditLogService.logSuccess(request, AdminAuditAction.UPDATE_FEEDBACK_STATUS,
+                    "FEEDBACK", String.valueOf(id),
+                    String.format("status=%s, hasReply=%s", newStatus, hasReply));
+            return Result.success(detail);
+        } catch (RuntimeException e) {
+            String newStatus = body != null && body.getStatus() != null ? body.getStatus().name() : "(unchanged)";
+            auditLogService.logFailure(request, AdminAuditAction.UPDATE_FEEDBACK_STATUS,
+                    "FEEDBACK", String.valueOf(id),
+                    String.format("status=%s", newStatus), e.getMessage());
+            throw e;
+        }
     }
 
     // ====== 内部 ======

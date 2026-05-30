@@ -1,5 +1,6 @@
 package com.lanprojects.fitcoach.log.controller;
 
+import com.lanprojects.fitcoach.common.audit.AdminAuditPort;
 import com.lanprojects.fitcoach.common.exception.BusinessException;
 import com.lanprojects.fitcoach.common.model.Result;
 import com.lanprojects.fitcoach.common.model.ResultCode;
@@ -10,8 +11,8 @@ import com.lanprojects.fitcoach.log.entity.LogPullTask;
 import com.lanprojects.fitcoach.log.service.LogPullService;
 import com.lanprojects.fitcoach.log.service.LogStorageService;
 import jakarta.servlet.http.HttpServletRequest;
-import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.core.io.FileSystemResource;
 import org.springframework.data.domain.Page;
 import org.springframework.http.HttpHeaders;
@@ -42,7 +43,6 @@ import java.util.List;
 @Slf4j
 @RestController
 @RequestMapping("/api/admin/logs/tasks")
-@RequiredArgsConstructor
 public class AdminLogController {
 
     /** 与 AdminAuthInterceptor.ATTR_ADMIN_USERNAME 保持一致；为避免对 fitcoach-admin 的强依赖，这里复刻常量字面量 */
@@ -50,6 +50,16 @@ public class AdminLogController {
 
     private final LogPullService logPullService;
     private final LogStorageService storageService;
+    /** 审计端口，required=false：在没有 fitcoach-admin 模块时可缺省（如纯客户端日志服务部署模式） */
+    private final AdminAuditPort auditPort;
+
+    public AdminLogController(LogPullService logPullService,
+                              LogStorageService storageService,
+                              @Autowired(required = false) AdminAuditPort auditPort) {
+        this.logPullService = logPullService;
+        this.storageService = storageService;
+        this.auditPort = auditPort;
+    }
 
     /**
      * 创建任务
@@ -59,7 +69,24 @@ public class AdminLogController {
     public Result<LogTaskDto> create(HttpServletRequest request,
                                      @RequestBody(required = false) CreateLogTaskRequest body) {
         String operator = (String) request.getAttribute(ATTR_ADMIN_USERNAME);
-        return Result.success(logPullService.createTask(body, operator));
+        String targetUid = body != null && body.getUid() != null ? body.getUid().trim() : "(null)";
+        try {
+            LogTaskDto dto = logPullService.createTask(body, operator);
+            if (auditPort != null) {
+                auditPort.logSuccess(request, "CREATE_LOG_TASK",
+                        "LOG_TASK", String.valueOf(dto.getId()),
+                        String.format("targetUid=%s, recentHours=%s",
+                                targetUid, body != null ? body.getRecentHours() : null));
+            }
+            return Result.success(dto);
+        } catch (RuntimeException e) {
+            if (auditPort != null) {
+                auditPort.logFailure(request, "CREATE_LOG_TASK",
+                        "LOG_TASK", null,
+                        String.format("targetUid=%s", targetUid), e.getMessage());
+            }
+            throw e;
+        }
     }
 
     /**
@@ -131,8 +158,20 @@ public class AdminLogController {
     @DeleteMapping("/{id}")
     public Result<Void> delete(@PathVariable("id") Long id, HttpServletRequest request) {
         String operator = (String) request.getAttribute(ATTR_ADMIN_USERNAME);
-        logPullService.deleteTask(id, operator);
-        return Result.success(null);
+        try {
+            logPullService.deleteTask(id, operator);
+            if (auditPort != null) {
+                auditPort.logSuccess(request, "DELETE_LOG_TASK",
+                        "LOG_TASK", String.valueOf(id), "delete + remove file");
+            }
+            return Result.success(null);
+        } catch (RuntimeException e) {
+            if (auditPort != null) {
+                auditPort.logFailure(request, "DELETE_LOG_TASK",
+                        "LOG_TASK", String.valueOf(id), "delete + remove file", e.getMessage());
+            }
+            throw e;
+        }
     }
 
     // ====== 内部 ======

@@ -10,6 +10,8 @@ import com.lanprojects.fitcoach.admin.util.AdminJwtUtils;
 import com.lanprojects.fitcoach.common.config.service.SysConfigService;
 import com.lanprojects.fitcoach.common.exception.BusinessException;
 import com.lanprojects.fitcoach.common.model.ResultCode;
+import com.lanprojects.fitcoach.common.security.LoginAttemptLimiter;
+import com.lanprojects.fitcoach.common.util.LogUtils;
 import com.lanprojects.fitcoach.login.service.AuthService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -17,6 +19,7 @@ import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.time.Duration;
 import java.time.LocalDateTime;
 import java.time.ZoneId;
 
@@ -42,15 +45,48 @@ public class AdminAuthService {
     private static final int MIN_PASSWORD_LENGTH = 6;
     private static final int MAX_PASSWORD_LENGTH = 32;
 
+    // ====== 登录限流（本地 Caffeine，单实例进程内有效） ======
+    // username 维度防对单管理员账号穷举密码；IP 维度防同 IP 横向爆破多账号。
+    // 跨实例不一致 —— 多副本部署需迁 Redis；admin 后台并发低，V1 单机够用。
+    private static final int USERNAME_MAX_ATTEMPTS = 5;
+    private static final int IP_MAX_ATTEMPTS = 10;
+    private static final Duration ATTEMPT_WINDOW = Duration.ofMinutes(10);
+
+    private final LoginAttemptLimiter usernameLimiter =
+            new LoginAttemptLimiter(USERNAME_MAX_ATTEMPTS, ATTEMPT_WINDOW, 10_000);
+    private final LoginAttemptLimiter ipLimiter =
+            new LoginAttemptLimiter(IP_MAX_ATTEMPTS, ATTEMPT_WINDOW, 10_000);
+
     private final AdminUserRepository adminUserRepository;
     private final SysConfigService sysConfigService;
     private final BCryptPasswordEncoder passwordEncoder;
 
     /**
-     * 管理员登录
+     * 管理员登录（不带 IP 重载 —— 兼容旧调用 / 单元测试；仅 username 维度限流）。
+     *
+     * @deprecated 业务方请改用 {@link #login(AdminLoginRequest, String)} 同时传入 IP，启用 IP 维度限流。
+     */
+    @Deprecated
+    public AdminLoginResponse login(AdminLoginRequest request) {
+        return login(request, null);
+    }
+
+    /**
+     * 管理员登录。
+     *
+     * <p><b>限流策略</b>（{@link LoginAttemptLimiter}，本地 Caffeine 单实例）：
+     * <ul>
+     *   <li>username 维度：{@value #USERNAME_MAX_ATTEMPTS} 次失败 / {@code ATTEMPT_WINDOW}；</li>
+     *   <li>IP 维度：{@value #IP_MAX_ATTEMPTS} 次失败 / {@code ATTEMPT_WINDOW}；</li>
+     *   <li>超限抛 {@link ResultCode#ADMIN_LOGIN_RATE_LIMITED}（不告知是哪一维度，避免规避）；</li>
+     *   <li>登录成功后<b>只</b>清零 username 维度计数；IP 维度故意保留防爆破其他账号。</li>
+     * </ul>
+     *
+     * @param request  登录请求体
+     * @param clientIp 客户端真实 IP；可传 null，传 null 时跳过 IP 维度限流
      */
     @Transactional
-    public AdminLoginResponse login(AdminLoginRequest request) {
+    public AdminLoginResponse login(AdminLoginRequest request, String clientIp) {
         if (request == null
                 || request.getUsername() == null || request.getUsername().isBlank()
                 || request.getPassword() == null || request.getPassword().isBlank()) {
@@ -59,33 +95,65 @@ public class AdminAuthService {
         }
 
         String username = request.getUsername().trim();
-        AdminUser admin = adminUserRepository.findByUsername(username)
-                // 同样按"账号或密码错误"统一对外，避免泄露账号是否存在
-                .orElseThrow(() -> new BusinessException(ResultCode.ADMIN_LOGIN_FAILED));
 
-        if (!Boolean.TRUE.equals(admin.getEnabled())) {
-            log.warn("管理员账号已禁用尝试登录, username={}", username);
-            throw new BusinessException(ResultCode.ADMIN_ACCOUNT_DISABLED);
+        // 1) 限流预检 —— 在 DB 查询之前先挡掉，避免暴力请求把 DB 打满
+        if (!usernameLimiter.isAllowed(username)) {
+            log.warn("管理员登录被限流（username 维度）, username={}", username);
+            throw new BusinessException(ResultCode.ADMIN_LOGIN_RATE_LIMITED);
+        }
+        if (clientIp != null && !clientIp.isBlank() && !ipLimiter.isAllowed(clientIp)) {
+            log.warn("管理员登录被限流（IP 维度）, ip={}", LogUtils.mask(clientIp));
+            throw new BusinessException(ResultCode.ADMIN_LOGIN_RATE_LIMITED);
         }
 
-        if (!passwordEncoder.matches(request.getPassword(), admin.getPasswordHash())) {
-            log.warn("管理员密码错误, username={}", username);
-            throw new BusinessException(ResultCode.ADMIN_LOGIN_FAILED);
+        try {
+            AdminUser admin = adminUserRepository.findByUsername(username)
+                    // 同样按"账号或密码错误"统一对外，避免泄露账号是否存在
+                    .orElseThrow(() -> new BusinessException(ResultCode.ADMIN_LOGIN_FAILED));
+
+            if (!Boolean.TRUE.equals(admin.getEnabled())) {
+                log.warn("管理员账号已禁用尝试登录, username={}", username);
+                throw new BusinessException(ResultCode.ADMIN_ACCOUNT_DISABLED);
+            }
+
+            if (!passwordEncoder.matches(request.getPassword(), admin.getPasswordHash())) {
+                log.warn("管理员密码错误, username={}", username);
+                throw new BusinessException(ResultCode.ADMIN_LOGIN_FAILED);
+            }
+
+            admin.setLastLoginAt(LocalDateTime.now());
+            adminUserRepository.save(admin);
+
+            String token = issueToken(admin);
+            int expireHours = currentExpireHours();
+            // 登录成功 → 清零 username 维度计数；IP 维度故意保留
+            usernameLimiter.reset(username);
+            log.info("管理员登录成功, username={}, role={}", username, admin.getRole());
+            return AdminLoginResponse.builder()
+                    .username(admin.getUsername())
+                    .displayName(displayNameOrFallback(admin))
+                    .role(admin.getRole().name())
+                    .token(token)
+                    .expiresIn(expireHours * 3600L)
+                    .build();
+        } catch (BusinessException e) {
+            // 仅对"账号或密码错误"类失败累计配额；账号禁用、限流自身不再加权（避免 DoS）
+            if (e.getCode() == ResultCode.ADMIN_LOGIN_FAILED.getCode()) {
+                int afterName = usernameLimiter.recordFailure(username);
+                if (afterName >= USERNAME_MAX_ATTEMPTS) {
+                    log.warn("管理员登录失败次数达上限（username 维度）, username={}, count={}/{}",
+                            username, afterName, USERNAME_MAX_ATTEMPTS);
+                }
+                if (clientIp != null && !clientIp.isBlank()) {
+                    int afterIp = ipLimiter.recordFailure(clientIp);
+                    if (afterIp >= IP_MAX_ATTEMPTS) {
+                        log.warn("管理员登录失败次数达上限（IP 维度）, ip={}, count={}/{}",
+                                LogUtils.mask(clientIp), afterIp, IP_MAX_ATTEMPTS);
+                    }
+                }
+            }
+            throw e;
         }
-
-        admin.setLastLoginAt(LocalDateTime.now());
-        adminUserRepository.save(admin);
-
-        String token = issueToken(admin);
-        int expireHours = currentExpireHours();
-        log.info("管理员登录成功, username={}, role={}", username, admin.getRole());
-        return AdminLoginResponse.builder()
-                .username(admin.getUsername())
-                .displayName(displayNameOrFallback(admin))
-                .role(admin.getRole().name())
-                .token(token)
-                .expiresIn(expireHours * 3600L)
-                .build();
     }
 
     /**

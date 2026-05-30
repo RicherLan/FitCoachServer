@@ -94,6 +94,11 @@ public enum ResultCode {
     ADMIN_PASSWORD_INVALID(7006, "密码长度需在 6-32 之间", "admin.password_invalid"),
     ADMIN_OLD_PASSWORD_WRONG(7007, "原密码不正确", "admin.old_password_wrong"),
     ADMIN_PERMISSION_DENIED(7008, "权限不足", "admin.permission_denied"),
+    /**
+     * 管理员登录失败次数过多，触发本地限流（{@link com.lanprojects.fitcoach.common.security.LoginAttemptLimiter}）。
+     * <p>当前默认策略：username 维度 5 次/10min、IP 维度 10 次/10min；超限后必须等窗口过期再尝试。
+     */
+    ADMIN_LOGIN_RATE_LIMITED(7009, "登录尝试次数过多，请稍后再试", "admin.login_rate_limited"),
     ADMIN_FEEDBACK_NOT_FOUND(7101, "反馈记录不存在", "admin.feedback_not_found"),
     ADMIN_FEEDBACK_STATUS_INVALID(7102, "反馈状态值不合法", "admin.feedback_status_invalid"),
     ADMIN_USER_TARGET_NOT_FOUND(7201, "目标用户不存在", "admin.user_target_not_found"),
@@ -124,6 +129,11 @@ public enum ResultCode {
     PASSWORD_VERIFY_REQUIRED(7405, "请提供原密码或短信验证码以完成验证", "password.verify_required"),
     PASSWORD_NOT_SET(7406, "尚未设置密码", "password.not_set"),
     PASSWORD_PHONE_REQUIRED(7407, "请先绑定手机号才能设置密码", "password.phone_required"),
+    /**
+     * 密码登录失败次数过多，触发本地限流（{@link com.lanprojects.fitcoach.common.security.LoginAttemptLimiter}）。
+     * <p>当前默认策略：phone 维度 5 次/15min、IP 维度 20 次/15min；超限后必须等窗口过期再尝试。
+     */
+    PASSWORD_LOGIN_RATE_LIMITED(7408, "登录尝试次数过多，请稍后再试", "password.login_rate_limited"),
 
     // ====== 健身动作 7501-7599（fitcoach-exercise） ======
     EXERCISE_NOT_FOUND(7501, "动作不存在", "exercise.not_found"),

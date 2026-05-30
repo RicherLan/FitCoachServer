@@ -138,6 +138,13 @@ public class UserProfileService {
                 || !cfg.getAllowedContentTypesView().contains(contentType.toLowerCase())) {
             throw new BusinessException(ResultCode.AVATAR_CONTENT_TYPE_INVALID);
         }
+        // 校验真实 magic number — 防止客户端伪造 Content-Type 把非图片当头像上传
+        if (!com.lanprojects.fitcoach.common.upload.FileMagicValidator
+                .matchesContentType(file, contentType)) {
+            log.warn("[avatar] magic number 与 contentType 不匹配（疑似伪造） contentType={} size={}",
+                    contentType, file.getSize());
+            throw new BusinessException(ResultCode.AVATAR_CONTENT_TYPE_INVALID);
+        }
     }
 
     /**

@@ -1,5 +1,7 @@
 package com.lanprojects.fitcoach.admin.controller;
 
+import com.lanprojects.fitcoach.admin.audit.AdminAuditAction;
+import com.lanprojects.fitcoach.admin.audit.AdminAuditLogService;
 import com.lanprojects.fitcoach.admin.dto.AdminLoginRequest;
 import com.lanprojects.fitcoach.admin.dto.AdminLoginResponse;
 import com.lanprojects.fitcoach.admin.dto.AdminProfileResponse;
@@ -7,6 +9,7 @@ import com.lanprojects.fitcoach.admin.dto.ChangePasswordRequest;
 import com.lanprojects.fitcoach.admin.security.AdminAuthInterceptor;
 import com.lanprojects.fitcoach.admin.service.AdminAuthService;
 import com.lanprojects.fitcoach.common.model.Result;
+import com.lanprojects.fitcoach.common.security.ClientIpResolver;
 import jakarta.servlet.http.HttpServletRequest;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -36,11 +39,32 @@ import org.springframework.web.bind.annotation.RestController;
 public class AdminAuthController {
 
     private final AdminAuthService adminAuthService;
+    private final AdminAuditLogService auditLogService;
 
     /** 登录 */
     @PostMapping("/login")
-    public Result<AdminLoginResponse> login(@RequestBody(required = false) AdminLoginRequest request) {
-        return Result.success(adminAuthService.login(request));
+    public Result<AdminLoginResponse> login(
+            @RequestBody(required = false) AdminLoginRequest request,
+            HttpServletRequest httpRequest) {
+        // 透传 IP 进入 AdminAuthService → 启用 username + IP 双维度本地限流
+        String clientIp = ClientIpResolver.resolve(httpRequest);
+        // 审计落账：登录是高频敏感操作，成功 / 失败都要记录
+        String attemptedUsername = request == null ? null : request.getUsername();
+        try {
+            AdminLoginResponse resp = adminAuthService.login(request, clientIp);
+            auditLogService.logSuccessAs(httpRequest, resp.getUsername(), resp.getRole(),
+                    AdminAuditAction.LOGIN_SUCCESS, "SELF", resp.getUsername(),
+                    "login success");
+            return Result.success(resp);
+        } catch (RuntimeException e) {
+            auditLogService.logFailureAs(httpRequest,
+                    attemptedUsername == null ? "(unknown)" : attemptedUsername,
+                    null,
+                    AdminAuditAction.LOGIN_FAILED, "SELF",
+                    attemptedUsername,
+                    "login failed", e.getMessage());
+            throw e;
+        }
     }
 
     /** 当前管理员资料 — username/role 来自 {@link AdminAuthInterceptor} 写入的 request attribute */
@@ -55,7 +79,15 @@ public class AdminAuthController {
     public Result<Void> changePassword(HttpServletRequest request,
                                        @RequestBody(required = false) ChangePasswordRequest body) {
         String username = (String) request.getAttribute(AdminAuthInterceptor.ATTR_ADMIN_USERNAME);
-        adminAuthService.changePassword(username, body);
-        return Result.success();
+        try {
+            adminAuthService.changePassword(username, body);
+            auditLogService.logSuccess(request, AdminAuditAction.CHANGE_PASSWORD,
+                    "SELF", username, "change own password");
+            return Result.success();
+        } catch (RuntimeException e) {
+            auditLogService.logFailure(request, AdminAuditAction.CHANGE_PASSWORD,
+                    "SELF", username, "change own password", e.getMessage());
+            throw e;
+        }
     }
 }
