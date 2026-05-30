@@ -41,6 +41,12 @@
             <artifactId>caffeine</artifactId>
         </dependency>
 
+        <!-- Spring Cache 抽象 — 配合 Caffeine 提供 @Cacheable / @CacheEvict / @CachePut 注解能力 -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-cache</artifactId>
+        </dependency>
+
         <!-- springdoc-openapi —— 提供 @Tag/@Operation/@Schema 等注解 + Swagger UI。
              放在 common 模块的好处：所有业务模块（admin/login/membership/...）的
              Controller 都能直接用注解写文档，且全局只有一份依赖版本管理。

@@ -1,5 +1,6 @@
 package com.lanprojects.fitcoach.membership.service;
 
+import com.lanprojects.fitcoach.common.cache.CacheNames;
 import com.lanprojects.fitcoach.common.event.PaymentSucceededEvent;
 import com.lanprojects.fitcoach.common.exception.BusinessException;
 import com.lanprojects.fitcoach.common.model.ResultCode;
@@ -12,6 +13,8 @@ import com.lanprojects.fitcoach.membership.repository.MembershipPlanRepository;
 import com.lanprojects.fitcoach.membership.repository.UserMembershipRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.cache.annotation.CacheEvict;
+import org.springframework.cache.annotation.Cacheable;
 import org.springframework.context.event.EventListener;
 import org.springframework.scheduling.annotation.Async;
 import org.springframework.stereotype.Service;
@@ -118,7 +121,11 @@ public class MembershipService {
 
     // ====== 套餐查询 ======
 
-    /** 客户端套餐列表（仅启用） */
+    /**
+     * 客户端套餐列表（仅启用）— Caffeine 缓存 5min（高频读 / 低频写），
+     * admin 改套餐时通过 {@link #evictPlanCache()} 清除。
+     */
+    @Cacheable(value = CacheNames.MEMBERSHIP_PLANS_ENABLED, key = "'all'")
     public List<MembershipPlan> listEnabledPlans() {
         return planRepository.findByEnabledTrueOrderBySortOrderAsc();
     }
@@ -301,8 +308,9 @@ public class MembershipService {
 
     // ====== Admin 套餐 CRUD ======
 
-    /** 创建套餐。校验 planCode 唯一。 */
+    /** 创建套餐。校验 planCode 唯一。创建后清缓存，让客户端下一次拉到新套餐。 */
     @Transactional
+    @CacheEvict(value = CacheNames.MEMBERSHIP_PLANS_ENABLED, allEntries = true)
     public MembershipPlan createPlan(MembershipPlan toCreate) {
         if (toCreate.getPlanCode() == null || toCreate.getPlanCode().isBlank()) {
             throw new BusinessException(ResultCode.MEMBERSHIP_PLAN_CODE_INVALID);
@@ -325,6 +333,7 @@ public class MembershipService {
      * 传 null = 不动；传 -1 / 空串 = 清空。
      */
     @Transactional
+    @CacheEvict(value = CacheNames.MEMBERSHIP_PLANS_ENABLED, allEntries = true)
     public MembershipPlan updatePlan(Long id, MembershipPlan patch) {
         MembershipPlan existing = planRepository.findById(id)
                 .orElseThrow(() -> new BusinessException(ResultCode.MEMBERSHIP_PLAN_NOT_FOUND));
