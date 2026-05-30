@@ -2,6 +2,7 @@ package com.lanprojects.fitcoach.admin.controller;
 
 import com.lanprojects.fitcoach.admin.audit.AdminAuditAction;
 import com.lanprojects.fitcoach.admin.audit.AdminAuditLogService;
+import com.lanprojects.fitcoach.admin.dto.BatchUpdateFeedbackStatusRequest;
 import com.lanprojects.fitcoach.admin.dto.FeedbackDetailDto;
 import com.lanprojects.fitcoach.admin.dto.FeedbackSummaryDto;
 import com.lanprojects.fitcoach.admin.dto.PageResponse;
@@ -9,6 +10,7 @@ import com.lanprojects.fitcoach.admin.dto.UpdateFeedbackStatusRequest;
 import com.lanprojects.fitcoach.admin.security.AdminAuthInterceptor;
 import com.lanprojects.fitcoach.admin.service.AdminFeedbackService;
 import com.lanprojects.fitcoach.common.exception.BusinessException;
+import com.lanprojects.fitcoach.common.model.BatchOperationResult;
 import com.lanprojects.fitcoach.common.model.Result;
 import com.lanprojects.fitcoach.common.model.ResultCode;
 import com.lanprojects.fitcoach.feedback.entity.FeedbackStatus;
@@ -19,6 +21,7 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
+import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
@@ -92,6 +95,33 @@ public class AdminFeedbackController {
             auditLogService.logFailure(request, AdminAuditAction.UPDATE_FEEDBACK_STATUS,
                     "FEEDBACK", String.valueOf(id),
                     String.format("status=%s", newStatus), e.getMessage());
+            throw e;
+        }
+    }
+
+    /**
+     * 批量更新反馈状态（同一目标状态、可选共用回复）。
+     * <p>POST /api/admin/feedbacks/batch/status
+     * <p>请求体：{ ids: [..], status: 'RESOLVED', handlerReply: '可选' }
+     * <p>语义：部分成功也走 2xx；返回体 affected / missing 给前端做 toast。
+     */
+    @PostMapping("/batch/status")
+    public Result<BatchOperationResult> batchUpdateStatus(HttpServletRequest request,
+                                                          @RequestBody(required = false) BatchUpdateFeedbackStatusRequest body) {
+        String operator = (String) request.getAttribute(AdminAuthInterceptor.ATTR_ADMIN_USERNAME);
+        int requested = body == null || body.getIds() == null ? 0 : body.getIds().size();
+        String statusName = body != null && body.getStatus() != null ? body.getStatus().name() : "(null)";
+        try {
+            BatchOperationResult result = adminFeedbackService.batchUpdateStatus(body, operator);
+            auditLogService.logSuccess(request, AdminAuditAction.BATCH_UPDATE_FEEDBACK_STATUS,
+                    "FEEDBACK", null,
+                    String.format("requested=%d, affected=%d, missing=%d, status=%s",
+                            requested, result.getAffected(), result.getMissing().size(), statusName));
+            return Result.success(result);
+        } catch (RuntimeException e) {
+            auditLogService.logFailure(request, AdminAuditAction.BATCH_UPDATE_FEEDBACK_STATUS,
+                    "FEEDBACK", null,
+                    String.format("requested=%d, status=%s", requested, statusName), e.getMessage());
             throw e;
         }
     }

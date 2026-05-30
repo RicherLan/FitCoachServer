@@ -1,10 +1,12 @@
 package com.lanprojects.fitcoach.admin.service;
 
+import com.lanprojects.fitcoach.admin.dto.BatchUpdateFeedbackStatusRequest;
 import com.lanprojects.fitcoach.admin.dto.FeedbackDetailDto;
 import com.lanprojects.fitcoach.admin.dto.FeedbackSummaryDto;
 import com.lanprojects.fitcoach.admin.dto.PageResponse;
 import com.lanprojects.fitcoach.admin.dto.UpdateFeedbackStatusRequest;
 import com.lanprojects.fitcoach.common.exception.BusinessException;
+import com.lanprojects.fitcoach.common.model.BatchOperationResult;
 import com.lanprojects.fitcoach.common.model.ResultCode;
 import com.lanprojects.fitcoach.feedback.entity.FeedbackStatus;
 import com.lanprojects.fitcoach.feedback.entity.FeedbackType;
@@ -28,6 +30,7 @@ import java.time.ZoneId;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.HashSet;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -51,6 +54,8 @@ public class AdminFeedbackService {
 
     private static final int MAX_PAGE_SIZE = 200;
     private static final int MAX_REPLY_LENGTH = 500;
+    /** 批量更新单次最多处理 200 条，与单页 MAX_PAGE_SIZE 对齐 */
+    private static final int MAX_BATCH_SIZE = 200;
 
     private final UserFeedbackRepository userFeedbackRepository;
     private final UserRepository userRepository;
@@ -142,6 +147,71 @@ public class AdminFeedbackService {
         log.info("管理员变更反馈状态, operator={}, feedbackId={}, before={}, after={}",
                 operator, id, before, req.getStatus());
         return getFeedbackDetail(id);
+    }
+
+    /**
+     * 批量更新反馈状态 / 处理回复。
+     * <p>语义：
+     * <ul>
+     *   <li>整批同一目标状态、同一可选回复（同 {@link #updateStatus} 的 handlerReply 规则）；</li>
+     *   <li>ids 去重后按 DB 实际存在的部分处理；不存在的 id 收集到 {@link BatchOperationResult#getMissing()} 返回；</li>
+     *   <li>整体单事务：要么本批全部成功，要么回滚（出现底层异常时）；</li>
+     *   <li>handledAt 统一取批次开始时刻，方便后续按时间段排查；</li>
+     *   <li>handlerReply 为 null 表示"不修改"；空串/全空白表示清空（与 {@link #updateStatus} 一致）。</li>
+     * </ul>
+     */
+    @Transactional
+    public BatchOperationResult batchUpdateStatus(BatchUpdateFeedbackStatusRequest req, String operator) {
+        if (req == null || req.getStatus() == null) {
+            throw new BusinessException(ResultCode.ADMIN_FEEDBACK_STATUS_INVALID);
+        }
+        if (req.getIds() == null || req.getIds().isEmpty()) {
+            throw new BusinessException(ResultCode.BAD_REQUEST, "ids 不能为空");
+        }
+        // 去重 + 过滤 null，保持原始顺序便于运营对账
+        Set<Long> uniqueIds = new LinkedHashSet<>();
+        for (Long id : req.getIds()) {
+            if (id != null) uniqueIds.add(id);
+        }
+        if (uniqueIds.isEmpty()) {
+            throw new BusinessException(ResultCode.BAD_REQUEST, "ids 不能全部为 null");
+        }
+        if (uniqueIds.size() > MAX_BATCH_SIZE) {
+            throw new BusinessException(ResultCode.BAD_REQUEST,
+                    "批量操作单次最多 " + MAX_BATCH_SIZE + " 条");
+        }
+        if (req.getHandlerReply() != null && req.getHandlerReply().length() > MAX_REPLY_LENGTH) {
+            throw new BusinessException(ResultCode.BAD_REQUEST,
+                    "处理回复长度不能超过 " + MAX_REPLY_LENGTH + " 字");
+        }
+
+        List<UserFeedback> rows = userFeedbackRepository.findAllById(uniqueIds);
+        LocalDateTime now = LocalDateTime.now();
+        String trimmedReply = req.getHandlerReply() == null
+                ? null
+                : (req.getHandlerReply().isBlank() ? null : req.getHandlerReply().trim());
+        for (UserFeedback fb : rows) {
+            fb.setStatus(req.getStatus());
+            if (req.getHandlerReply() != null) {
+                fb.setHandlerReply(trimmedReply);
+            }
+            fb.setHandlerAdmin(operator);
+            fb.setHandledAt(now);
+        }
+        if (!rows.isEmpty()) {
+            userFeedbackRepository.saveAll(rows);
+        }
+
+        // missing：请求里有但 DB 没查到 —— 用 LinkedHashSet 减去 actual id
+        Set<Long> existingIds = new HashSet<>(rows.size());
+        for (UserFeedback fb : rows) existingIds.add(fb.getId());
+        List<Long> missing = new ArrayList<>();
+        for (Long id : uniqueIds) {
+            if (!existingIds.contains(id)) missing.add(id);
+        }
+        log.info("管理员批量变更反馈状态, operator={}, requested={}, affected={}, missing={}, status={}",
+                operator, uniqueIds.size(), rows.size(), missing.size(), req.getStatus());
+        return BatchOperationResult.of(rows.size(), missing);
     }
 
     // ====== 内部 ======

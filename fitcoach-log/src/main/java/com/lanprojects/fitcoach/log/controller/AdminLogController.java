@@ -2,6 +2,7 @@ package com.lanprojects.fitcoach.log.controller;
 
 import com.lanprojects.fitcoach.common.audit.AdminAuditPort;
 import com.lanprojects.fitcoach.common.exception.BusinessException;
+import com.lanprojects.fitcoach.common.model.BatchOperationResult;
 import com.lanprojects.fitcoach.common.model.Result;
 import com.lanprojects.fitcoach.common.model.ResultCode;
 import com.lanprojects.fitcoach.log.dto.CreateLogTaskRequest;
@@ -175,6 +176,38 @@ public class AdminLogController {
             throw e;
         }
     }
+
+    /**
+     * 批量删除任务（同步删盘）。
+     * <p>DELETE /api/admin/logs/tasks/batch  Body: { ids: [..] }
+     * <p>语义：单次最多 200，部分成功也走 2xx，返回体含 affected/missing。
+     */
+    @DeleteMapping("/batch")
+    public Result<BatchOperationResult> batchDelete(HttpServletRequest request,
+                                                    @RequestBody(required = false) BatchDeleteRequest body) {
+        String operator = (String) request.getAttribute(ATTR_ADMIN_USERNAME);
+        List<Long> ids = body == null ? null : body.ids();
+        int requested = ids == null ? 0 : ids.size();
+        try {
+            BatchOperationResult result = logPullService.deleteTasks(ids, operator);
+            if (auditPort != null) {
+                auditPort.logSuccess(request, "BATCH_DELETE_LOG_TASK",
+                        "LOG_TASK", null,
+                        String.format("requested=%d, affected=%d, missing=%d",
+                                requested, result.getAffected(), result.getMissing().size()));
+            }
+            return Result.success(result);
+        } catch (RuntimeException e) {
+            if (auditPort != null) {
+                auditPort.logFailure(request, "BATCH_DELETE_LOG_TASK",
+                        "LOG_TASK", null, "requested=" + requested, e.getMessage());
+            }
+            throw e;
+        }
+    }
+
+    /** 批量删除请求体 */
+    public record BatchDeleteRequest(List<Long> ids) {}
 
     // ====== 内部 ======
 

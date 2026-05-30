@@ -53,10 +53,12 @@ public enum AdminAuditAction {
 
     // ===== 反馈 =====
     UPDATE_FEEDBACK_STATUS,
+    BATCH_UPDATE_FEEDBACK_STATUS,
 
     // ===== 日志远程拉取 =====
     CREATE_LOG_TASK,
     DELETE_LOG_TASK,
+    BATCH_DELETE_LOG_TASK,
 
     // ===== 账户 =====
     LOGIN_SUCCESS,

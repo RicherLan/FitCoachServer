@@ -1,6 +1,7 @@
 package com.lanprojects.fitcoach.log.service;
 
 import com.lanprojects.fitcoach.common.exception.BusinessException;
+import com.lanprojects.fitcoach.common.model.BatchOperationResult;
 import com.lanprojects.fitcoach.common.model.ResultCode;
 import com.lanprojects.fitcoach.log.config.LogProperties;
 import com.lanprojects.fitcoach.log.dto.CreateLogTaskRequest;
@@ -21,8 +22,13 @@ import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.multipart.MultipartFile;
 
 import java.time.LocalDateTime;
+import java.util.ArrayList;
+import java.util.HashSet;
+import java.util.LinkedHashSet;
+import java.util.List;
 import java.util.Locale;
 import java.util.Optional;
+import java.util.Set;
 
 /**
  * 日志拉取核心业务服务。
@@ -142,6 +148,52 @@ public class LogPullService {
         taskRepository.delete(task);
         log.info("admin 删除日志任务, operator={}, taskId={}, uid={}, status={}",
                 operator, id, task.getUid(), task.getStatus());
+    }
+
+    /**
+     * admin 批量删除任务（同步删盘 zip）。
+     * <p>语义：
+     * <ul>
+     *   <li>ids 去重后按 DB 实际存在的部分处理；不存在的 id 收集到 missing 返回；</li>
+     *   <li>整体单事务：要么本批全部成功（含删盘），要么回滚（出现底层异常时）；</li>
+     *   <li>单次最多 200 条，与 admin 列表单页上限保持一致；</li>
+     *   <li>对已 UPLOADED 的任务先 deleteIfExists 删盘（IO 异常会让事务回滚）；</li>
+     *   <li>任务行物理删除（不软删，DB 行量小）。</li>
+     * </ul>
+     */
+    @Transactional
+    public BatchOperationResult deleteTasks(List<Long> rawIds, String operator) {
+        if (rawIds == null || rawIds.isEmpty()) {
+            throw new BusinessException(ResultCode.BAD_REQUEST, "ids 不能为空");
+        }
+        Set<Long> uniqueIds = new LinkedHashSet<>();
+        for (Long id : rawIds) {
+            if (id != null) uniqueIds.add(id);
+        }
+        if (uniqueIds.isEmpty()) {
+            throw new BusinessException(ResultCode.BAD_REQUEST, "ids 不能全部为 null");
+        }
+        if (uniqueIds.size() > 200) {
+            throw new BusinessException(ResultCode.BAD_REQUEST, "批量操作单次最多 200 条");
+        }
+        List<LogPullTask> rows = taskRepository.findAllById(uniqueIds);
+        for (LogPullTask task : rows) {
+            if (task.getFileRelativePath() != null) {
+                storageService.deleteIfExists(task.getFileRelativePath());
+            }
+        }
+        if (!rows.isEmpty()) {
+            taskRepository.deleteAll(rows);
+        }
+        Set<Long> existingIds = new HashSet<>(rows.size());
+        for (LogPullTask t : rows) existingIds.add(t.getId());
+        List<Long> missing = new ArrayList<>();
+        for (Long id : uniqueIds) {
+            if (!existingIds.contains(id)) missing.add(id);
+        }
+        log.info("admin 批量删除日志任务, operator={}, requested={}, affected={}, missing={}",
+                operator, uniqueIds.size(), rows.size(), missing.size());
+        return BatchOperationResult.of(rows.size(), missing);
     }
 
     // ==============================================================
