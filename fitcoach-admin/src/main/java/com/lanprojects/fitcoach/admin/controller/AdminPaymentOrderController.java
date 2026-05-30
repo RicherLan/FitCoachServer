@@ -9,6 +9,7 @@ import com.lanprojects.fitcoach.admin.security.AdminAuthInterceptor;
 import com.lanprojects.fitcoach.common.exception.BusinessException;
 import com.lanprojects.fitcoach.common.model.Result;
 import com.lanprojects.fitcoach.common.model.ResultCode;
+import com.lanprojects.fitcoach.common.util.CsvHttpResponseUtil;
 import com.lanprojects.fitcoach.login.entity.User;
 import com.lanprojects.fitcoach.login.repository.UserRepository;
 import com.lanprojects.fitcoach.payment.entity.OrderStatus;
@@ -16,6 +17,7 @@ import com.lanprojects.fitcoach.payment.entity.PaymentOrder;
 import com.lanprojects.fitcoach.payment.service.PaymentService;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.servlet.http.HttpServletRequest;
+import jakarta.servlet.http.HttpServletResponse;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -24,6 +26,9 @@ import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
 import org.springframework.web.bind.annotation.*;
 
+import java.io.IOException;
+import java.time.LocalDateTime;
+import java.time.format.DateTimeFormatter;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -46,6 +51,11 @@ import java.util.stream.Collectors;
 @RequestMapping("/api/admin/payment/orders")
 @RequiredArgsConstructor
 public class AdminPaymentOrderController {
+
+    /** 单次 CSV 导出最大订单条数，避免拖垮 DB */
+    private static final int MAX_EXPORT_SIZE = 10_000;
+
+    private static final DateTimeFormatter ISO_FMT = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss");
 
     private final PaymentService paymentService;
     private final UserRepository userRepository;
@@ -116,6 +126,57 @@ public class AdminPaymentOrderController {
         }
     }
 
+    /**
+     * P2-12：按筛选条件导出订单 CSV（含 userUid/nickname/amount/status/refund 字段）。
+     * <p>路径：{@code GET /api/admin/payment/orders/export}
+     * <p>最多 {@link #MAX_EXPORT_SIZE} 条；超出请按 status 进一步过滤后再导。
+     */
+    @GetMapping("/export")
+    public void exportCsv(HttpServletRequest request, HttpServletResponse response,
+                          @RequestParam(value = "status", required = false) String status) throws IOException {
+        Pageable pageable = PageRequest.of(0, MAX_EXPORT_SIZE,
+                org.springframework.data.domain.Sort.by(org.springframework.data.domain.Sort.Direction.DESC, "createdAt"));
+        Page<PaymentOrder> orderPage;
+        if (status != null && !status.isBlank()) {
+            OrderStatus st = parseStatus(status);
+            orderPage = paymentService.adminListByStatus(st, pageable);
+        } else {
+            orderPage = paymentService.adminList(pageable);
+        }
+        List<PaymentOrder> orders = orderPage.getContent();
+        Map<Long, User> userMap = batchLoadUsers(orders);
+
+        String operator = (String) request.getAttribute(AdminAuthInterceptor.ATTR_ADMIN_USERNAME);
+        auditLogService.logSuccess(request, AdminAuditAction.EXPORT_ORDERS, "ORDER", null,
+                "rows=" + orders.size() + ", status=" + status);
+        log.info("导出支付订单 CSV, operator={}, rows={}, status={}", operator, orders.size(), status);
+
+        CsvHttpResponseUtil.write(response, "orders",
+                List.of("订单号", "用户 uid", "用户昵称", "套餐", "金额(元)", "币种", "状态", "退款状态", "退款金额(元)",
+                        "通道", "客户端", "通道单号", "创建时间", "支付时间", "退款时间", "失败原因"),
+                orders, o -> {
+                    User u = userMap.get(o.getUserId());
+                    return List.of(
+                            nullToEmpty(o.getOrderId()),
+                            u == null ? "" : nullToEmpty(u.getUid()),
+                            u == null ? "" : nullToEmpty(u.getNickname()),
+                            nullToEmpty(o.getPlanSnapshotName()),
+                            centsToYuan(o.getAmountCents()),
+                            nullToEmpty(o.getCurrency()),
+                            o.getStatus() == null ? "" : o.getStatus().name(),
+                            o.getRefundStatus() == null ? "" : o.getRefundStatus().name(),
+                            centsToYuan(o.getRefundAmountCents()),
+                            o.getChannel() == null ? "" : o.getChannel().name(),
+                            nullToEmpty(o.getClientPlatform()),
+                            nullToEmpty(o.getChannelTransactionId()),
+                            fmtIso(o.getCreatedAt()),
+                            fmtIso(o.getPaidAt()),
+                            fmtIso(o.getRefundedAt()),
+                            nullToEmpty(o.getFailReason())
+                    );
+                });
+    }
+
     // ====== 内部 ======
 
     private OrderStatus parseStatus(String raw) {
@@ -145,5 +206,19 @@ public class AdminPaymentOrderController {
             dto.setUserNickname(u.getNickname());
         }
         return dto;
+    }
+
+    private static String nullToEmpty(String s) {
+        return s == null ? "" : s;
+    }
+
+    /** 分 → 元，保留 2 位小数；null → 空 */
+    private static String centsToYuan(Integer cents) {
+        if (cents == null) return "";
+        return String.format("%.2f", cents / 100.0);
+    }
+
+    private static String fmtIso(LocalDateTime t) {
+        return t == null ? "" : t.format(ISO_FMT);
     }
 }

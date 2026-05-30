@@ -64,4 +64,10 @@ public enum AdminAuditAction {
     LOGIN_SUCCESS,
     LOGIN_FAILED,
     CHANGE_PASSWORD,
+
+    // ===== 数据导出 =====
+    EXPORT_USERS,
+    EXPORT_ORDERS,
+    EXPORT_FEEDBACKS,
+    EXPORT_AUDIT_LOGS,
 }

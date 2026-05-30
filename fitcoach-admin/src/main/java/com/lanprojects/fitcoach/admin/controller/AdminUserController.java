@@ -11,9 +11,11 @@ import com.lanprojects.fitcoach.admin.service.AdminUserService;
 import com.lanprojects.fitcoach.common.exception.BusinessException;
 import com.lanprojects.fitcoach.common.model.Result;
 import com.lanprojects.fitcoach.common.model.ResultCode;
+import com.lanprojects.fitcoach.common.util.CsvHttpResponseUtil;
 import com.lanprojects.fitcoach.login.entity.User;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.servlet.http.HttpServletRequest;
+import jakarta.servlet.http.HttpServletResponse;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -23,6 +25,11 @@ import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
+
+import java.io.IOException;
+import java.time.LocalDateTime;
+import java.time.format.DateTimeFormatter;
+import java.util.List;
 
 /**
  * 用户管理（admin 后台）。
@@ -92,6 +99,41 @@ public class AdminUserController {
         }
     }
 
+    /**
+     * P2-12：按当前筛选条件导出用户 CSV。
+     * <p>路径：{@code GET /api/admin/users/export}
+     * <p>响应：text/csv; charset=UTF-8（含 BOM，Excel 直接打开中文不乱码）。
+     * <p>最多 {@link AdminUserService#MAX_EXPORT_SIZE} 条，超过部分需要进一步过滤后再导。
+     * <p>VIEWER 只读但允许导出（导出≈高级查询，不写库；写库才需要 OPERATOR）。
+     */
+    @GetMapping("/export")
+    public void exportCsv(HttpServletRequest request, HttpServletResponse response,
+                          @RequestParam(value = "keyword", required = false) String keyword,
+                          @RequestParam(value = "enabled", required = false) Boolean enabled,
+                          @RequestParam(value = "loginType", required = false) String loginType) throws IOException {
+        User.LoginType lt = parseLoginType(loginType);
+        List<User> users = adminUserService.exportUsers(keyword, enabled, lt);
+
+        String operator = (String) request.getAttribute(AdminAuthInterceptor.ATTR_ADMIN_USERNAME);
+        auditLogService.logSuccess(request, AdminAuditAction.EXPORT_USERS, "USER", null,
+                "rows=" + users.size() + ", keyword=" + keyword + ", enabled=" + enabled + ", loginType=" + loginType);
+        log.info("导出用户 CSV, operator={}, rows={}", operator, users.size());
+
+        CsvHttpResponseUtil.write(response, "users",
+                List.of("uid", "昵称", "登录方式", "性别", "手机号", "启用", "注册时间", "最后登录时间", "最后活跃时间"),
+                users, u -> List.of(
+                        nullToEmpty(u.getUid()),
+                        nullToEmpty(u.getNickname()),
+                        u.getLoginType() == null ? "" : u.getLoginType().name(),
+                        u.getGender() == null ? "" : String.valueOf(u.getGender()),
+                        maskPhone(u.getPhone()),
+                        u.getEnabled() == null ? "" : (u.getEnabled() ? "是" : "否"),
+                        fmtIso(u.getCreatedAt()),
+                        fmtIso(u.getLastLoginAt()),
+                        fmtIso(u.getLastActiveAt())
+                ));
+    }
+
     // ====== 内部 ======
 
     private User.LoginType parseLoginType(String raw) {
@@ -101,5 +143,21 @@ public class AdminUserController {
         } catch (IllegalArgumentException e) {
             throw new BusinessException(ResultCode.BAD_REQUEST, "loginType 参数不合法：" + raw);
         }
+    }
+
+    private static String nullToEmpty(String s) {
+        return s == null ? "" : s;
+    }
+
+    /** 列表导出与列表展示保持一致：仅展示脱敏手机号 */
+    private static String maskPhone(String phone) {
+        if (phone == null || phone.length() < 11) return phone == null ? "" : phone;
+        return phone.substring(0, 3) + "****" + phone.substring(7);
+    }
+
+    private static final DateTimeFormatter ISO_FMT = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss");
+
+    static String fmtIso(LocalDateTime t) {
+        return t == null ? "" : t.format(ISO_FMT);
     }
 }

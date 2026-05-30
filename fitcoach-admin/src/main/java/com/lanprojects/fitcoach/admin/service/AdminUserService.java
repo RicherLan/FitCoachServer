@@ -40,6 +40,9 @@ public class AdminUserService {
     /** 单页最大条数硬上限，防止误传超大 size 把 server 拖垮 */
     private static final int MAX_PAGE_SIZE = 200;
 
+    /** P2-12：CSV 导出单次最大条数硬上限，避免一次性查 50w 用户压垮 DB / OOM */
+    public static final int MAX_EXPORT_SIZE = 10_000;
+
     private final UserRepository userRepository;
     private final UserFeedbackRepository userFeedbackRepository;
     private final AdminUrlService adminUrlService;
@@ -79,6 +82,36 @@ public class AdminUserService {
                 PageRequest.of(safePage, safeSize, Sort.by(Sort.Direction.DESC, "createdAt")));
         return PageResponse.from(p, u -> UserSummaryDto.from(
                 u, adminUrlService.resolve(u.getAvatarUrl()), maskPhone(u.getPhone())));
+    }
+
+    /**
+     * P2-12：按筛选条件导出用户（CSV）。
+     * <p>复用 {@link #listUsers} 的同款 Spec，最多返回 {@link #MAX_EXPORT_SIZE} 条，
+     * 超过上限的部分由调用方提示用户继续按更细条件筛选后再导。
+     * <p>返回 entity 而非 DTO —— 让 controller 决定脱敏 / 字段顺序 / 表头文案。
+     */
+    public List<User> exportUsers(String keyword, Boolean enabled, User.LoginType loginType) {
+        Specification<User> spec = (root, query, cb) -> {
+            List<Predicate> ps = new ArrayList<>();
+            if (keyword != null && !keyword.isBlank()) {
+                String like = "%" + keyword.trim() + "%";
+                ps.add(cb.or(
+                        cb.like(root.get("nickname"), like),
+                        cb.like(root.get("phone"), like),
+                        cb.like(root.get("uid"), like)
+                ));
+            }
+            if (enabled != null) {
+                ps.add(cb.equal(root.get("enabled"), enabled));
+            }
+            if (loginType != null) {
+                ps.add(cb.equal(root.get("loginType"), loginType));
+            }
+            return ps.isEmpty() ? cb.conjunction() : cb.and(ps.toArray(new Predicate[0]));
+        };
+        Page<User> p = userRepository.findAll(spec,
+                PageRequest.of(0, MAX_EXPORT_SIZE, Sort.by(Sort.Direction.DESC, "createdAt")));
+        return p.getContent();
     }
 
     /** 用户详情 */

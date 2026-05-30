@@ -3,6 +3,7 @@ package com.lanprojects.fitcoach.admin.controller;
 import com.lanprojects.fitcoach.admin.audit.AdminAuditAction;
 import com.lanprojects.fitcoach.admin.audit.AdminAuditLog;
 import com.lanprojects.fitcoach.admin.audit.AdminAuditLogRepository;
+import com.lanprojects.fitcoach.admin.audit.AdminAuditLogService;
 import com.lanprojects.fitcoach.admin.dto.PageResponse;
 import com.lanprojects.fitcoach.admin.dto.audit.AdminAuditLogDto;
 import com.lanprojects.fitcoach.admin.entity.AdminRole;
@@ -10,21 +11,27 @@ import com.lanprojects.fitcoach.admin.security.AdminAuthInterceptor;
 import com.lanprojects.fitcoach.common.exception.BusinessException;
 import com.lanprojects.fitcoach.common.model.Result;
 import com.lanprojects.fitcoach.common.model.ResultCode;
+import com.lanprojects.fitcoach.common.util.CsvHttpResponseUtil;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.servlet.http.HttpServletRequest;
+import jakarta.servlet.http.HttpServletResponse;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
+import org.springframework.data.domain.Sort;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
+import java.io.IOException;
 import java.time.Instant;
 import java.time.LocalDateTime;
 import java.time.ZoneId;
+import java.time.format.DateTimeFormatter;
+import java.util.List;
 
 /**
  * 后台审计日志查询接口（admin only）。
@@ -44,7 +51,12 @@ import java.time.ZoneId;
 @RequiredArgsConstructor
 public class AdminAuditLogController {
 
+    /** 单次导出最大条数（审计日志可能很大，导出请按时间窗口精细过滤） */
+    private static final int MAX_EXPORT_SIZE = 10_000;
+    private static final DateTimeFormatter ISO_FMT = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss");
+
     private final AdminAuditLogRepository repository;
+    private final AdminAuditLogService auditLogService;
 
     /**
      * 多维筛选分页查询。
@@ -96,6 +108,67 @@ public class AdminAuditLogController {
                 start, end, pageable);
 
         return Result.success(PageResponse.from(result, AdminAuditLogDto::from));
+    }
+
+    /**
+     * P2-12：按筛选条件导出审计日志 CSV（最多 {@value #MAX_EXPORT_SIZE} 条；仅 SUPER_ADMIN）。
+     * <p>路径：{@code GET /api/admin/audit-logs/export}
+     * <p>导出动作本身也会落一条 {@link AdminAuditAction#EXPORT_AUDIT_LOGS} 审计。
+     */
+    @GetMapping("/export")
+    public void exportCsv(HttpServletRequest request, HttpServletResponse response,
+                          @RequestParam(value = "username", required = false) String username,
+                          @RequestParam(value = "action", required = false) String action,
+                          @RequestParam(value = "targetType", required = false) String targetType,
+                          @RequestParam(value = "targetId", required = false) String targetId,
+                          @RequestParam(value = "start", required = false) Long startMs,
+                          @RequestParam(value = "end", required = false) Long endMs) throws IOException {
+        requireSuperAdmin(request);
+
+        AdminAuditAction actionEnum = null;
+        if (action != null && !action.isBlank()) {
+            try {
+                actionEnum = AdminAuditAction.valueOf(action.trim().toUpperCase());
+            } catch (IllegalArgumentException e) {
+                throw new BusinessException(ResultCode.BAD_REQUEST, "action 不是合法枚举：" + action);
+            }
+        }
+
+        Pageable pageable = PageRequest.of(0, MAX_EXPORT_SIZE,
+                Sort.by(Sort.Direction.DESC, "createdAt"));
+        Page<AdminAuditLog> page = repository.search(
+                blankToNull(username), actionEnum,
+                blankToNull(targetType), blankToNull(targetId),
+                toLdt(startMs), toLdt(endMs), pageable);
+        List<AdminAuditLog> rows = page.getContent();
+
+        String operator = (String) request.getAttribute(AdminAuthInterceptor.ATTR_ADMIN_USERNAME);
+        auditLogService.logSuccess(request, AdminAuditAction.EXPORT_AUDIT_LOGS, "AUDIT_LOG", null,
+                String.format("rows=%d, username=%s, action=%s, targetType=%s",
+                        rows.size(), username, action, targetType));
+        log.info("导出审计日志 CSV, operator={}, rows={}", operator, rows.size());
+
+        CsvHttpResponseUtil.write(response, "audit_logs",
+                List.of("ID", "操作员", "角色", "操作", "目标类型", "目标ID", "成功", "摘要", "错误信息", "IP", "请求路径", "User-Agent", "时间"),
+                rows, r -> List.of(
+                        r.getId() == null ? "" : String.valueOf(r.getId()),
+                        nullToEmpty(r.getAdminUsername()),
+                        nullToEmpty(r.getAdminRole()),
+                        r.getAction() == null ? "" : r.getAction().name(),
+                        nullToEmpty(r.getTargetType()),
+                        nullToEmpty(r.getTargetId()),
+                        r.getSuccess() == null ? "" : (r.getSuccess() ? "是" : "否"),
+                        nullToEmpty(r.getSummary()),
+                        nullToEmpty(r.getErrorMsg()),
+                        nullToEmpty(r.getIp()),
+                        nullToEmpty(r.getRequestUri()),
+                        nullToEmpty(r.getUa()),
+                        r.getCreatedAt() == null ? "" : r.getCreatedAt().format(ISO_FMT)
+                ));
+    }
+
+    private static String nullToEmpty(String s) {
+        return s == null ? "" : s;
     }
 
     private static void requireSuperAdmin(HttpServletRequest request) {

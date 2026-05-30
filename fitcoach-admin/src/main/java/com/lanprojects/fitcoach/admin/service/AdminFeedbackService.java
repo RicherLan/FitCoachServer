@@ -56,6 +56,8 @@ public class AdminFeedbackService {
     private static final int MAX_REPLY_LENGTH = 500;
     /** 批量更新单次最多处理 200 条，与单页 MAX_PAGE_SIZE 对齐 */
     private static final int MAX_BATCH_SIZE = 200;
+    /** 单次 CSV 导出上限 */
+    public static final int MAX_EXPORT_SIZE = 10_000;
 
     private final UserFeedbackRepository userFeedbackRepository;
     private final UserRepository userRepository;
@@ -108,6 +110,37 @@ public class AdminFeedbackService {
         return PageResponse.from(p, fb ->
                 FeedbackSummaryDto.from(fb, uidToNickname.get(fb.getUid())));
     }
+
+    /**
+     * P2-12：按筛选条件导出反馈（最多 {@link #MAX_EXPORT_SIZE} 条）。
+     * <p>返回 entity + 同步返回的 uid→nickname 映射，由 controller 决定字段映射。
+     */
+    public ExportResult exportFeedbacks(FeedbackStatus status, FeedbackType type,
+                                        String keyword, Long startMs, Long endMs) {
+        Specification<UserFeedback> spec = (root, query, cb) -> {
+            List<Predicate> ps = new ArrayList<>();
+            if (status != null) ps.add(cb.equal(root.get("status"), status));
+            if (type != null) ps.add(cb.equal(root.get("type"), type));
+            if (keyword != null && !keyword.isBlank()) {
+                String like = "%" + keyword.trim() + "%";
+                ps.add(cb.or(
+                        cb.like(root.get("content"), like),
+                        cb.like(root.get("uid"), like)
+                ));
+            }
+            if (startMs != null) ps.add(cb.greaterThanOrEqualTo(root.get("createdAt"), toLocal(startMs)));
+            if (endMs != null) ps.add(cb.lessThan(root.get("createdAt"), toLocal(endMs)));
+            return ps.isEmpty() ? cb.conjunction() : cb.and(ps.toArray(new Predicate[0]));
+        };
+        Page<UserFeedback> p = userFeedbackRepository.findAll(spec,
+                PageRequest.of(0, MAX_EXPORT_SIZE, Sort.by(Sort.Direction.DESC, "createdAt")));
+        List<UserFeedback> rows = p.getContent();
+        Map<String, String> uidToNickname = batchLoadNickname(rows);
+        return new ExportResult(rows, uidToNickname);
+    }
+
+    /** P2-12 导出返回包：反馈行 + uid→nickname 映射 */
+    public record ExportResult(List<UserFeedback> rows, Map<String, String> uidToNickname) {}
 
     /** 反馈详情 */
     public FeedbackDetailDto getFeedbackDetail(Long id) {

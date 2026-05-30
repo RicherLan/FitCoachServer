@@ -13,10 +13,12 @@ import com.lanprojects.fitcoach.common.exception.BusinessException;
 import com.lanprojects.fitcoach.common.model.BatchOperationResult;
 import com.lanprojects.fitcoach.common.model.Result;
 import com.lanprojects.fitcoach.common.model.ResultCode;
+import com.lanprojects.fitcoach.common.util.CsvHttpResponseUtil;
 import com.lanprojects.fitcoach.feedback.entity.FeedbackStatus;
 import com.lanprojects.fitcoach.feedback.entity.FeedbackType;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.servlet.http.HttpServletRequest;
+import jakarta.servlet.http.HttpServletResponse;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -27,6 +29,11 @@ import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
+
+import java.io.IOException;
+import java.time.LocalDateTime;
+import java.time.format.DateTimeFormatter;
+import java.util.List;
 
 /**
  * 反馈管理（admin 后台）。
@@ -126,7 +133,54 @@ public class AdminFeedbackController {
         }
     }
 
+    /**
+     * P2-12：按筛选条件导出反馈 CSV（最多 10000 条，超过请进一步筛选）。
+     * <p>路径：{@code GET /api/admin/feedbacks/export}
+     */
+    @GetMapping("/export")
+    public void exportCsv(HttpServletRequest request, HttpServletResponse response,
+                          @RequestParam(value = "status", required = false) String status,
+                          @RequestParam(value = "type", required = false) String type,
+                          @RequestParam(value = "keyword", required = false) String keyword,
+                          @RequestParam(value = "start", required = false) Long start,
+                          @RequestParam(value = "end", required = false) Long end) throws IOException {
+        FeedbackStatus s = parseEnum(FeedbackStatus.class, status, ResultCode.ADMIN_FEEDBACK_STATUS_INVALID);
+        FeedbackType t = parseEnum(FeedbackType.class, type, ResultCode.FEEDBACK_TYPE_INVALID);
+        AdminFeedbackService.ExportResult result = adminFeedbackService.exportFeedbacks(s, t, keyword, start, end);
+        String operator = (String) request.getAttribute(AdminAuthInterceptor.ATTR_ADMIN_USERNAME);
+        auditLogService.logSuccess(request, AdminAuditAction.EXPORT_FEEDBACKS, "FEEDBACK", null,
+                String.format("rows=%d, status=%s, type=%s", result.rows().size(), status, type));
+        log.info("导出反馈 CSV, operator={}, rows={}", operator, result.rows().size());
+
+        CsvHttpResponseUtil.write(response, "feedbacks",
+                List.of("ID", "uid", "昵称", "类型", "状态", "内容", "App 版本", "平台", "处理人", "处理回复", "创建时间", "处理时间"),
+                result.rows(), fb -> List.of(
+                        fb.getId() == null ? "" : String.valueOf(fb.getId()),
+                        nullToEmpty(fb.getUid()),
+                        nullToEmpty(result.uidToNickname().get(fb.getUid())),
+                        fb.getType() == null ? "" : fb.getType().name(),
+                        fb.getStatus() == null ? "" : fb.getStatus().name(),
+                        nullToEmpty(fb.getContent()),
+                        nullToEmpty(fb.getAppVersion()),
+                        nullToEmpty(fb.getPlatform()),
+                        nullToEmpty(fb.getHandlerAdmin()),
+                        nullToEmpty(fb.getHandlerReply()),
+                        fmtIso(fb.getCreatedAt()),
+                        fmtIso(fb.getHandledAt())
+                ));
+    }
+
     // ====== 内部 ======
+
+    private static final DateTimeFormatter ISO_FMT = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss");
+
+    private static String nullToEmpty(String s) {
+        return s == null ? "" : s;
+    }
+
+    private static String fmtIso(LocalDateTime t) {
+        return t == null ? "" : t.format(ISO_FMT);
+    }
 
     private <E extends Enum<E>> E parseEnum(Class<E> type, String raw, ResultCode invalidCode) {
         if (raw == null || raw.isBlank()) return null;
