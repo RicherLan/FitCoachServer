@@ -31,6 +31,15 @@ public class WebConfig implements WebMvcConfigurer {
     @Value("${upload.base-dir}")
     private String uploadBaseDir;
 
+    /**
+     * CORS 允许的源 pattern 列表（逗号分隔）。
+     * - dev 默认 "*"（允许本地开发任意端口）
+     * - prod 必须收紧到具体域名（如 "https://app.fitcoach.com,https://admin.fitcoach.com"），
+     *   由 application-prod.yml 覆盖；若覆盖时仍配 "*" + allowCredentials=true 会有 CSRF 风险。
+     */
+    @Value("${cors.allowed-origin-patterns:*}")
+    private String corsAllowedOriginPatterns;
+
     private final ClientInfoInterceptor clientInfoInterceptor;
 
     public WebConfig(ClientInfoInterceptor clientInfoInterceptor) {
@@ -39,8 +48,14 @@ public class WebConfig implements WebMvcConfigurer {
 
     @Override
     public void addCorsMappings(CorsRegistry registry) {
+        // 逗号分隔多域名；trim 防 yml 配置粘空格
+        String[] patterns = corsAllowedOriginPatterns.split(",");
+        for (int i = 0; i < patterns.length; i++) {
+            patterns[i] = patterns[i].trim();
+        }
+        log.info("CORS allowed origin patterns: {}", String.join(", ", patterns));
         registry.addMapping("/api/**")
-                .allowedOriginPatterns("*")
+                .allowedOriginPatterns(patterns)
                 // PATCH 也加上 — 用户资料的局部更新走 PATCH
                 .allowedMethods("GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS")
                 .allowedHeaders(

@@ -2,6 +2,15 @@
 # 通过 --spring.profiles.active=prod 激活（见 shell/start.sh）
 # 敏感配置（数据库密码 / 第三方密钥）走环境变量，不入 git。
 
+# ====== CORS 收紧 ======
+# 生产环境严禁通配 "*"（与 allowCredentials=true 配合会有 CSRF 风险）。
+# 由 CORS_ALLOWED_ORIGINS 环境变量注入，多域名用逗号分隔：
+#   CORS_ALLOWED_ORIGINS="https://app.fitcoach.com,https://admin.fitcoach.com"
+# 默认值故意留一个明显不合法的占位，启动后未配会被 CORS 直接拒，
+# 帮你在第一次访问时立刻发现"上线漏配"，而不是上线后才被攻击发现。
+cors:
+  allowed-origin-patterns: ${CORS_ALLOWED_ORIGINS:https://please-configure-CORS_ALLOWED_ORIGINS}
+
 spring:
   datasource:
     # 生产环境数据库连接（密码必须用环境变量注入，禁止硬编码）

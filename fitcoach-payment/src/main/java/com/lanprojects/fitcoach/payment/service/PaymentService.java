@@ -1,5 +1,7 @@
 package com.lanprojects.fitcoach.payment.service;
 
+import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.lanprojects.fitcoach.common.event.PaymentSucceededEvent;
 import com.lanprojects.fitcoach.common.exception.BusinessException;
 import com.lanprojects.fitcoach.common.model.ResultCode;
@@ -21,6 +23,7 @@ import org.springframework.transaction.annotation.Transactional;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.HashMap;
+import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.Optional;
 import java.util.concurrent.ThreadLocalRandom;
@@ -56,6 +59,9 @@ public class PaymentService {
     private final PaymentOrderRepository orderRepository;
     private final PaymentChannelRouter channelRouter;
     private final ApplicationEventPublisher eventPublisher;
+    // 复用 Spring 默认配置 ObjectMapper：序列化 attach 时确保 planCode 中的特殊字符
+    // （引号 / 反斜线 / 控制字符）被正确转义，避免 JSON 注入污染微信回调解析。
+    private final ObjectMapper objectMapper = new ObjectMapper();
 
     // ====== 创建订单 ======
 
@@ -313,9 +319,26 @@ public class PaymentService {
         return LocalDateTime.now().format(ORDER_ID_FORMAT) + suffix + rand;
     }
 
-    /** 微信 attach 字段透传 JSON：本系统将 userId / planCode 编进去，回调时再解。 */
+    /**
+     * 微信 attach 字段透传 JSON：本系统将 userId / planCode 编进去，回调时再解。
+     *
+     * <p>必须用 ObjectMapper 序列化，不能字符串拼接 —— planCode 虽然来自 server 校验过的 plan，
+     * 但若运营后台允许配置含特殊字符（引号 / 反斜线 / 换行）的 planCode，
+     * 拼接会破坏 JSON 结构甚至构成注入。LinkedHashMap 保证字段顺序稳定，
+     * 便于回调日志比对。
+     */
     private String buildAttachJson(Long userId, String planCode) {
-        return "{\"userId\":" + userId + ",\"planCode\":\"" + planCode + "\"}";
+        Map<String, Object> attach = new LinkedHashMap<>(2);
+        attach.put("userId", userId);
+        attach.put("planCode", planCode);
+        try {
+            return objectMapper.writeValueAsString(attach);
+        } catch (JsonProcessingException e) {
+            // 防御性 fallback：理论上 LinkedHashMap<String,Object> 永远不会序列化失败；
+            // 真出问题就退化成 userId-only attach，避免阻塞下单主链路。
+            log.error("[payment] 序列化 attach 失败 userId={} planCode={} ", userId, planCode, e);
+            return "{\"userId\":" + userId + "}";
+        }
     }
 
     // ====== 出参 ======
