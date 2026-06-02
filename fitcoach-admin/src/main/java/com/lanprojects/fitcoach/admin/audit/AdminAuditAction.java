@@ -46,6 +46,11 @@ public enum AdminAuditAction {
     UPDATE_MUSCLE_GROUP,
     DELETE_MUSCLE_GROUP,
 
+    // ===== 训练记录 / 训练动作库 =====
+    CREATE_TRAINING_EXERCISE,
+    UPDATE_TRAINING_EXERCISE,
+    DELETE_TRAINING_EXERCISE,
+
     // ===== App 版本 =====
     CREATE_APP_VERSION,
     UPDATE_APP_VERSION,
@@ -70,4 +75,5 @@ public enum AdminAuditAction {
     EXPORT_ORDERS,
     EXPORT_FEEDBACKS,
     EXPORT_AUDIT_LOGS,
+    EXPORT_TRAINING_RECORDS,
 }

@@ -1,0 +1,43 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd">
+    <modelVersion>4.0.0</modelVersion>
+
+    <parent>
+        <groupId>com.lanprojects</groupId>
+        <artifactId>fitcoach-server</artifactId>
+        <version>1.0.0-SNAPSHOT</version>
+    </parent>
+
+    <artifactId>fitcoach-training-record</artifactId>
+    <name>FitCoach Training Record</name>
+    <description>
+        训练记录模块：用户手动录入的训练日志（区别于 fitcoach-exercise 的 AI 实时识别动作）。
+        包含两组独立但联动的实体：
+          - TrainingExercise：通用训练动作库（86+，覆盖力量 / 有氧 / 自重，按肌群分类）；
+          - TrainingRecord / TrainingRecordExercise / TrainingRecordSet：用户手动写下的训练日志（组数 / 重量 / 次数）。
+        与 fitcoach-exercise 共享 muscle_group 字典；动作 key 在两表之间允许重名（MVP 不做关联映射）。
+    </description>
+
+    <dependencies>
+        <!-- 通用基础（Result / ResultCode / BaseEntity / BusinessException / I18nMessages）。
+             web/jpa/validation/springdoc 由 fitcoach-common 传递引入，无需重复声明。 -->
+        <dependency>
+            <groupId>com.lanprojects</groupId>
+            <artifactId>fitcoach-common</artifactId>
+        </dependency>
+
+        <!-- 用户鉴权（AuthSupport.requireUserId） -->
+        <dependency>
+            <groupId>com.lanprojects</groupId>
+            <artifactId>fitcoach-login</artifactId>
+        </dependency>
+
+        <!-- 复用肌群字典（MuscleGroupRepository 校验 muscleGroup 字段合法性） -->
+        <dependency>
+            <groupId>com.lanprojects</groupId>
+            <artifactId>fitcoach-exercise</artifactId>
+        </dependency>
+    </dependencies>
+</project>

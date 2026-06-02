@@ -42,6 +42,10 @@
         </dependency>
         <dependency>
             <groupId>com.lanprojects</groupId>
+            <artifactId>fitcoach-training-record</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>com.lanprojects</groupId>
             <artifactId>fitcoach-membership</artifactId>
         </dependency>
         <dependency>

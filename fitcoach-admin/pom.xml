@@ -55,6 +55,15 @@
         </dependency>
 
         <!--
+            训练记录模块（PRD §「记录」Tab 新增）：admin 端复用 TrainingExerciseService
+            和 TrainingRecordService 做后台动作库 CRUD + 用户训练记录只读查看。
+        -->
+        <dependency>
+            <groupId>com.lanprojects</groupId>
+            <artifactId>fitcoach-training-record</artifactId>
+        </dependency>
+
+        <!--
             App 版本管理（Phase 3 加入）：admin 端复用 AppVersionService / AppVersionEntity
             做后台 CRUD，App 端检查更新接口在 fitcoach-appversion 自身。
         -->

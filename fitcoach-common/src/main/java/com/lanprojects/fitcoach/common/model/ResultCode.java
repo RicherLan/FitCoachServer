@@ -182,7 +182,25 @@ public enum ResultCode {
     PAYMENT_RECEIPT_INVALID(8110, "Apple 收据校验失败", "payment.receipt_invalid"),
     PAYMENT_RECEIPT_ALREADY_USED(8111, "该收据已被使用，请勿重复提交", "payment.receipt_already_used"),
     PAYMENT_CONFIG_MISSING(8112, "支付通道配置缺失，请联系管理员", "payment.config_missing"),
-    PAYMENT_PLATFORM_REQUIRED(8113, "无法识别客户端平台，请检查请求 Header", "payment.platform_required");
+    PAYMENT_PLATFORM_REQUIRED(8113, "无法识别客户端平台，请检查请求 Header", "payment.platform_required"),
+
+    // ====== 训练动作库 8201-8299（fitcoach-training-record · TrainingExercise，用户手动录入的动作字典） ======
+    // 与 fitcoach-exercise 的 EXERCISE（AI 实时识别动作，7501 段）完全独立 —— 两个领域的 key 允许重名。
+    TRAINING_EXERCISE_NOT_FOUND(8201, "训练动作不存在", "training_exercise.not_found"),
+    TRAINING_EXERCISE_KEY_DUPLICATE(8202, "训练动作 key 已存在，请勿重复创建", "training_exercise.key_duplicate"),
+    TRAINING_EXERCISE_DISABLED(8203, "该训练动作已下架", "training_exercise.disabled"),
+    TRAINING_EXERCISE_EQUIPMENT_INVALID(8204, "器械类型不合法（仅支持 BARBELL/DUMBBELL/MACHINE/BODYWEIGHT/CABLE/CARDIO）", "training_exercise.equipment_invalid"),
+
+    // ====== 训练记录 8301-8399（fitcoach-training-record · TrainingRecord，用户手动写下的训练日志） ======
+    TRAINING_RECORD_NOT_FOUND(8301, "训练记录不存在", "training_record.not_found"),
+    TRAINING_RECORD_FORBIDDEN(8302, "无权访问该训练记录", "training_record.forbidden"),
+    TRAINING_RECORD_DATE_INVALID(8303, "训练日期不合法", "training_record.date_invalid"),
+    TRAINING_RECORD_NO_EXERCISES(8304, "至少添加一个训练动作", "training_record.no_exercises"),
+    TRAINING_RECORD_NO_SETS(8305, "每个动作至少需要一组", "training_record.no_sets"),
+    TRAINING_RECORD_WEIGHT_INVALID(8306, "重量必须 ≥ 0", "training_record.weight_invalid"),
+    TRAINING_RECORD_REPS_INVALID(8307, "次数必须 ≥ 1", "training_record.reps_invalid"),
+    TRAINING_RECORD_CLIENT_ID_REQUIRED(8308, "缺少幂等标识 clientId", "training_record.client_id_required"),
+    TRAINING_RECORD_EXERCISE_NOT_FOUND(8309, "训练记录中引用的动作不存在", "training_record.exercise_not_found");
 
     private final int code;
     /** zh-CN 内置文案，作为 i18n properties 全部漏配时的最终兜底；不建议直接下发，请走 I18nMessages 翻译 */
