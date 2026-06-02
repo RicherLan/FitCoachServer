@@ -23,9 +23,14 @@ spring:
     # 生产关闭 show-sql，避免日志被 SQL 撑爆；DEBUG 模式排障时临时打开
     show-sql: false
     hibernate:
-      # 生产用 validate 或 none —— 表结构变更必须走 flyway/手动 SQL 评审，
-      # 严禁让 hibernate 自动改表（一不小心删字段就是事故）
-      ddl-auto: validate
+      # 生产默认 validate —— 表结构变更必须走 flyway/手动 SQL 评审，
+      # 严禁让 hibernate 默认就能自动改表（一不小心删字段就是事故）。
+      #
+      # 例外场景（通过 JPA_DDL_AUTO 环境变量覆盖）：
+      #   - 首次部署（库是空的）：临时设 JPA_DDL_AUTO=update，跑一次让 Hibernate 建表
+      #   - 加新表/字段：同上，跑完后改回 validate
+      #   - 注意：永远不要在生产用 create / create-drop，会清库！
+      ddl-auto: ${JPA_DDL_AUTO:validate}
 
 # ====== Swagger 在生产默认关闭 ======
 # 避免接口列表 / 请求体结构裸暴露给互联网爬虫和扫描器。
