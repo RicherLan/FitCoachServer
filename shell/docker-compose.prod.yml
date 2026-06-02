@@ -89,6 +89,10 @@ services:
       # JPA schema 策略：默认 validate（严格校验），首次部署/加表时临时设 update
       JPA_DDL_AUTO: ${JPA_DDL_AUTO:-validate}
 
+      # Admin 默认密码逃生开关：首次部署 admin/admin123 还没改 → 必须设 true 才能启动；
+      # 登录后改密码 → 立刻关回 false，避免长期允许默认密码
+      ADMIN_ALLOW_DEFAULT_PASSWORD: ${ADMIN_ALLOW_DEFAULT_PASSWORD:-false}
+
       # CORS
       CORS_ALLOWED_ORIGINS: ${CORS_ALLOWED_ORIGINS}
 
