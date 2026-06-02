@@ -32,6 +32,30 @@ FROM maven:3.9-eclipse-temurin-17 AS builder
 
 WORKDIR /build
 
+# --- Maven 阿里云镜像（国内构建提速，国外环境也无副作用） ---
+# 不用单独挂 settings.xml 文件，直接 heredoc 写到 ~/.m2/，跨平台稳定
+RUN mkdir -p /root/.m2 && cat > /root/.m2/settings.xml <<'EOF'
+<?xml version="1.0" encoding="UTF-8"?>
+<settings xmlns="http://maven.apache.org/SETTINGS/1.0.0"
+          xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+          xsi:schemaLocation="http://maven.apache.org/SETTINGS/1.0.0 https://maven.apache.org/xsd/settings-1.0.0.xsd">
+    <mirrors>
+        <mirror>
+            <id>aliyun-public</id>
+            <mirrorOf>central</mirrorOf>
+            <name>Aliyun Public</name>
+            <url>https://maven.aliyun.com/repository/public</url>
+        </mirror>
+        <mirror>
+            <id>aliyun-spring</id>
+            <mirrorOf>spring-milestones,spring-snapshots</mirrorOf>
+            <name>Aliyun Spring</name>
+            <url>https://maven.aliyun.com/repository/spring</url>
+        </mirror>
+    </mirrors>
+</settings>
+EOF
+
 # --- 依赖层（变化少，放在前面利用 Docker layer cache） ---
 # 先拷所有 pom.xml（父 + 各子模块），跑一次 dependency:go-offline 把依赖拉到 ~/.m2
 # 这样后续只改 src 不改 pom 时，不会重新下依赖
