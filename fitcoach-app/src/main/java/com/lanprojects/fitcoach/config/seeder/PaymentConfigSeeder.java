@@ -8,15 +8,21 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.boot.CommandLineRunner;
 import org.springframework.core.annotation.Order;
+import org.springframework.core.env.Environment;
 import org.springframework.stereotype.Component;
+
+import java.util.Arrays;
+import java.util.List;
 
 /**
  * 支付通道相关 SysConfig 默认值播种。
  *
  * <p>开发期默认 {@code payment.mock.enabled=true}，下单立即返回成功，无需配置任何外部商户号。
- * 生产部署前，运维必须：
+ * <p><b>生产 profile 下，首次插入时 {@code payment.mock.enabled} 默认 false</b>，
+ * 避免被 PaymentProductionGuard 拒启动。
+ *
+ * <p>生产部署前，运维必须：
  * <ol>
- *   <li>关闭 {@code payment.mock.enabled}；</li>
  *   <li>填入 wechat 商户号 / api key / notifyUrl；</li>
  *   <li>苹果开发者账号到位后填入 apple bundle id 和 shared secret 并 enable。</li>
  * </ol>
@@ -27,16 +33,24 @@ import org.springframework.stereotype.Component;
 @RequiredArgsConstructor
 public class PaymentConfigSeeder implements CommandLineRunner {
 
+    /** 视为"生产"的 spring profile 名字（小写比较）。"prod" / "production" 都算。 */
+    private static final List<String> PROD_PROFILE_NAMES = Arrays.asList("prod", "production");
+
     private final SysConfigRepository sysConfigRepository;
     private final ConfigCryptoService configCryptoService;
+    private final Environment environment;
 
     @Override
     public void run(String... args) {
         int inserted = 0;
 
-        // 全局开关 — 开发期 Mock 启用，生产关闭
+        // 全局开关 — 开发期 Mock 启用，生产首次默认 false（与 PaymentProductionGuard 对齐）
+        boolean isProd = Arrays.stream(environment.getActiveProfiles())
+                .map(String::toLowerCase)
+                .anyMatch(PROD_PROFILE_NAMES::contains);
+        String mockDefault = isProd ? "false" : "true";
         inserted += ensureExists(new SysConfig(
-                PaymentConfigKeys.MOCK_ENABLED, "true", "payment",
+                PaymentConfigKeys.MOCK_ENABLED, mockDefault, "payment",
                 "Mock 支付通道是否启用（生产环境必须关闭）"));
 
         // 微信支付 — 默认全部空，等运营在 admin 后台配

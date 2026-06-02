@@ -6,6 +6,7 @@
 #   cd /opt/fitcoach/FitCoachServer
 #   bash shell/deploy.sh                  # 默认流程：拉代码 + build 镜像 + 重启
 #   bash shell/deploy.sh --skip-build     # 跳过构建，直接用现有镜像重启
+#   bash shell/deploy.sh --no-rollback    # 失败时不自动回滚（首次部署/调试期推荐）
 #   bash shell/deploy.sh --rollback       # 回滚到上一个镜像 tag
 #   bash shell/deploy.sh --logs           # 跟踪应用日志
 #   bash shell/deploy.sh --status         # 查看容器状态
@@ -39,9 +40,11 @@ HEALTH_TIMEOUT=120
 # 参数
 ACTION="deploy"
 SKIP_BUILD=false
+NO_ROLLBACK=false
 while [[ $# -gt 0 ]]; do
     case "$1" in
         --skip-build) SKIP_BUILD=true; shift ;;
+        --no-rollback) NO_ROLLBACK=true; shift ;;
         --rollback)   ACTION="rollback"; shift ;;
         --logs)       ACTION="logs"; shift ;;
         --status)     ACTION="status"; shift ;;
@@ -218,9 +221,15 @@ do_deploy() {
     else
         echo ""
         echo -e "${RED}=====================================================${NC}"
-        echo -e "${RED}❌ 健康检查失败，自动回滚...${NC}"
+        if [ "$NO_ROLLBACK" = "true" ]; then
+            echo -e "${RED}❌ 健康检查失败（--no-rollback，不自动回滚）${NC}"
+            echo -e "${YELLOW}   排查命令：bash shell/deploy.sh --logs${NC}"
+            echo -e "${YELLOW}   手动回滚：bash shell/deploy.sh --rollback${NC}"
+        else
+            echo -e "${RED}❌ 健康检查失败，自动回滚...${NC}"
+            do_rollback
+        fi
         echo -e "${RED}=====================================================${NC}"
-        do_rollback
         exit 1
     fi
 }
