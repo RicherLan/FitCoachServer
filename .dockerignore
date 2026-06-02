@@ -1,0 +1,60 @@
+# ============================================================
+# .dockerignore — 控制 docker build 时发送给 daemon 的文件
+# 越精简越快，且能避免敏感文件被打进镜像
+# ============================================================
+
+# === 构建产物 ===
+**/target/
+**/*.class
+**/*.jar
+**/*.war
+*.log
+logs/
+
+# === IDE ===
+.idea/
+.vscode/
+*.iml
+*.iws
+*.ipr
+*.swp
+
+# === OS ===
+.DS_Store
+Thumbs.db
+
+# === Git ===
+.git/
+.gitignore
+.gitattributes
+
+# === Maven wrapper（容器内有 maven 镜像，不需要 wrapper） ===
+.mvn/wrapper/maven-wrapper.jar
+.mvn/timing.properties
+
+# === Shell 运行时（PID / nohup 日志） ===
+shell/run/
+**/*.pid
+
+# === 环境变量文件（绝对不能打进镜像！）===
+.env
+.env.*
+!.env.prod.example
+
+# === 文档与脚本（运行时不需要） ===
+doc/
+shell/
+README.md
+*.md
+
+# === 测试相关 ===
+**/src/test/
+
+# === Docker 本身的元文件 ===
+Dockerfile
+.dockerignore
+docker-compose*.yml
+
+# === 上传/数据卷（仅本地存在，不能进镜像） ===
+uploads/
+data/

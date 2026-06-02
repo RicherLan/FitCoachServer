@@ -39,4 +39,9 @@ shell/run/
 
 # === Environment ===
 .env
+.env.prod
+.env.local
 *.env.local
+# 模板可以入库
+!.env.prod.example
+!.env.example
