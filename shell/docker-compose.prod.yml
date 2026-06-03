@@ -93,6 +93,12 @@ services:
       # 登录后改密码 → 立刻关回 false，避免长期允许默认密码
       ADMIN_ALLOW_DEFAULT_PASSWORD: ${ADMIN_ALLOW_DEFAULT_PASSWORD:-false}
 
+      # sys_config 加密用 master key（AES-256-GCM）
+      # 生产必填！未设置时会落到容器内 /app/.fitcoach/master.key —— 容器重建即丢，
+      # 之前加密的所有 sys_config 行（如 captcha/sms 密钥）将永远无法解密。
+      # 生成方式：openssl rand -base64 32
+      FITCOACH_MASTER_KEY: ${FITCOACH_MASTER_KEY:-}
+
       # CORS
       CORS_ALLOWED_ORIGINS: ${CORS_ALLOWED_ORIGINS}
 
