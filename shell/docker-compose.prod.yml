@@ -163,6 +163,9 @@ services:
       - ${NGINX_LOG_DIR:-/data/fitcoach/logs/nginx}:/var/log/nginx
       # 静态资源直读（nginx 直接出，绕过 app，性能更好）
       - ${UPLOAD_DATA_DIR:-/data/fitcoach/uploads}:/usr/share/nginx/uploads:ro
+      # MIGO FIT 官方网站（独立仓库 fitcoach-website 部署的静态站，root /）
+      # 维护：bash shell/deploy-website.sh （首次 init / 后续直接 pull）
+      - ${WEBSITE_DIR:-/data/fitcoach/website}:/usr/share/nginx/website:ro
     depends_on:
       app:
         condition: service_healthy
