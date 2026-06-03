@@ -155,8 +155,12 @@ services:
       - "${NGINX_HTTP_PORT:-80}:80"
       - "${NGINX_HTTPS_PORT:-443}:443"
     volumes:
-      # 主配置（按需挂载片段，避免动整个 nginx.conf）
-      - ../nginx/fitcoach.conf:/etc/nginx/conf.d/default.conf:ro
+      # nginx 配置目录（整个 conf.d 都用宿主机的，覆盖镜像里的 default.conf）
+      # ⚠️ 这里必须挂"目录"而不是"单文件"——单文件挂载有 inode 锁死的坑：
+      # git pull 会以 rename 替换文件（inode 变化），单文件 bind mount 还指着
+      # 老 inode，导致容器里永远读不到新内容（reload/nginx -t 都骗过）。
+      # 目录挂载是路径解析的，自动跟随宿主机最新文件。
+      - ../nginx:/etc/nginx/conf.d:ro
       # SSL 证书（用 certbot 申请 Let's Encrypt 后放这里）
       - ${SSL_CERT_DIR:-/data/fitcoach/certs}:/etc/nginx/certs:ro
       # nginx 自身日志
