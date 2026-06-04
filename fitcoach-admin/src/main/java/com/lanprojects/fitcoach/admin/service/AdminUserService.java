@@ -125,9 +125,22 @@ public class AdminUserService {
         if (req == null || req.getNickname() == null || req.getPassword() == null) {
             throw new BusinessException(ResultCode.BAD_REQUEST, "昵称和密码不能为空");
         }
+
+        // account：admin 指定则用指定值（先查重），否则自动生成
+        String account;
+        if (req.getAccount() != null && !req.getAccount().isBlank()) {
+            account = req.getAccount().trim();
+            if (userRepository.existsByAccount(account)) {
+                throw new BusinessException(ResultCode.ADMIN_USER_ACCOUNT_DUPLICATE,
+                        "账号 " + account + " 已被占用");
+            }
+        } else {
+            account = accountGenerator.generateUnique();
+        }
+
         User user = new User();
         user.setUid(UUID.randomUUID().toString().replace("-", ""));
-        user.setAccount(accountGenerator.generateUnique());
+        user.setAccount(account);
         user.setNickname(req.getNickname().trim());
         user.setLoginType(User.LoginType.ACCOUNT);
         user.setRegistrationSource(User.RegistrationSource.ADMIN_CREATED);
