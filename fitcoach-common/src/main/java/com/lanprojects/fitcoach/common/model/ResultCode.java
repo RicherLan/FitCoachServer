@@ -102,9 +102,16 @@ public enum ResultCode {
     ADMIN_FEEDBACK_NOT_FOUND(7101, "反馈记录不存在", "admin.feedback_not_found"),
     ADMIN_FEEDBACK_STATUS_INVALID(7102, "反馈状态值不合法", "admin.feedback_status_invalid"),
     ADMIN_USER_TARGET_NOT_FOUND(7201, "目标用户不存在", "admin.user_target_not_found"),
-    ADMIN_TEST_ACCOUNT_DUPLICATE(7202, "测试账号已存在，请换一个 account", "admin.test_account_duplicate"),
-    ADMIN_TEST_ACCOUNT_ACCOUNT_INVALID(7203, "测试账号 account 仅支持英文/数字/下划线，长度 1-32", "admin.test_account_account_invalid"),
-    ADMIN_TEST_ACCOUNT_PASSWORD_INVALID(7204, "测试账号密码长度需在 6-64 之间", "admin.test_account_password_invalid"),
+    /**
+     * account 冲突 —— 通常发生在 admin 后台手动指定 account（暂未启用此能力）
+     * 或 {@link com.lanprojects.fitcoach.login.service.AccountGenerator} 极端情况下保底未中。
+     */
+    ADMIN_USER_ACCOUNT_DUPLICATE(7202, "用户号已存在，请换一个", "admin.user_account_duplicate"),
+    /**
+     * account 自动生成失败 —— 短期内连续重试 N 次均冲突，意味着号段需扩容（极小概率）。
+     */
+    ACCOUNT_GENERATION_FAILED(7203, "无法生成用户号，请稍后再试", "account.generation_failed"),
+    ADMIN_USER_PASSWORD_INVALID(7204, "密码长度需在 6-64 之间", "admin.user_password_invalid"),
 
     // ====== 日志拉取 7301-7399（fitcoach-log 模块） ======
     LOG_TASK_NOT_FOUND(7301, "日志任务不存在", "log.task_not_found"),
@@ -125,7 +132,7 @@ public enum ResultCode {
     LOG_DOWNLOAD_IO_ERROR(7322, "日志文件读取失败", "log.download_io_error"),
 
     // ====== 客户端密码登录 / 改密 7401-7499（fitcoach-login PasswordService） ======
-    PASSWORD_LOGIN_FAILED(7401, "手机号或密码错误", "password.login_failed"),
+    PASSWORD_LOGIN_FAILED(7401, "账号或密码错误", "password.login_failed"),
     PASSWORD_FORMAT_INVALID(7402, "密码需 6-32 位且至少包含 1 个字母和 1 个数字", "password.format_invalid"),
     PASSWORD_OLD_WRONG(7403, "原密码不正确", "password.old_wrong"),
     PASSWORD_OTP_REQUIRED(7404, "首次设置密码需先验证短信验证码", "password.otp_required"),

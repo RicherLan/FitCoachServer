@@ -28,6 +28,10 @@ public enum AdminAuditAction {
     // ===== 用户 =====
     BAN_USER,
     UNBAN_USER,
+    /** admin 后台手动创建 C 端 user（{@code registrationSource=ADMIN_CREATED}） */
+    CREATE_USER,
+    /** admin 后台重置 C 端 user 的登录密码（{@code passwordHash} 被覆盖） */
+    RESET_USER_PASSWORD,
 
     // ===== 系统配置 =====
     UPDATE_SYS_CONFIG,
@@ -70,11 +74,13 @@ public enum AdminAuditAction {
     LOGIN_FAILED,
     CHANGE_PASSWORD,
 
-    // ===== 内部测试账号（user.loginType=TEST） =====
-    CREATE_TEST_ACCOUNT,
-    UPDATE_TEST_ACCOUNT,
-    DELETE_TEST_ACCOUNT,
-    RESET_TEST_ACCOUNT_PASSWORD,
+    // ===== 内部测试账号（历史枚举，user.loginType=TEST，已下线） =====
+    // 保留枚举值仅为兼容 admin_audit_log 表中历史行的反序列化；
+    // 新代码已统一走 CREATE_USER / RESET_USER_PASSWORD（user.account 体系）。
+    @Deprecated CREATE_TEST_ACCOUNT,
+    @Deprecated UPDATE_TEST_ACCOUNT,
+    @Deprecated DELETE_TEST_ACCOUNT,
+    @Deprecated RESET_TEST_ACCOUNT_PASSWORD,
 
     // ===== 数据导出 =====
     EXPORT_USERS,

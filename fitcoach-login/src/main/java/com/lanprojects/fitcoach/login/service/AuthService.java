@@ -55,6 +55,7 @@ public class AuthService {
     private final UserRepository userRepository;
     private final SysConfigService sysConfigService;
     private final UploadProperties uploadProperties;
+    private final AccountGenerator accountGenerator;
 
     /**
      * 微信登录
@@ -98,16 +99,23 @@ public class AuthService {
     }
 
     /**
-     * 对外暴露的"已存在用户登录"通用入口 —— 由特殊登录方式（如内部测试账号登录
-     * {@link TestLoginService}）调用，复用 {@link #buildLoginResponse(User)} 的
-     * sessionId 滚动 / JWT 签发逻辑，避免每个登录入口都重复造轮子。
-     * <p>调用方需自己完成"用户存在性 + 账号启用 + 凭证校验"，本方法只负责"刷新最近登录时间 + 颁 token"。
+     * 对外暴露的"已存在用户登录"通用入口 —— 由其它已校验凭证的登录方式（如「账号 + 密码」
+     * {@link PasswordService#loginByAccount(String, String, String)}）调用，
+     * 复用 {@link #buildLoginResponse(User)} 的 sessionId 滚动 / JWT 签发逻辑，避免每个登录入口都重复造轮子。
+     * <p>调用方需自己完成"用户存在性 + 账号启用 + 凭证校验"。本方法负责：
+     * <ol>
+     *   <li>把本次登录方式写到 {@code user.loginType}（最近登录方式语义）；</li>
+     *   <li>刷新 {@code user.lastLoginAt}；</li>
+     *   <li>颁 token + rotate sessionId（互踢逻辑）。</li>
+     * </ol>
      *
-     * @param user 已通过校验的 user，不能为 null
+     * @param user           已通过校验的 user，不能为 null
+     * @param latestLoginType 本次实际使用的登录方式（用于写入 {@code user.loginType}）
      * @return 完整 LoginResponse（含 access/refresh token）
      */
     @Transactional
-    public LoginResponse loginExistingUser(User user) {
+    public LoginResponse loginExistingUser(User user, User.LoginType latestLoginType) {
+        user.setLoginType(latestLoginType);
         user.setLastLoginAt(LocalDateTime.now());
         userRepository.save(user);
         return buildLoginResponse(user);
@@ -124,6 +132,7 @@ public class AuthService {
         // /me 接口只返回基础信息，不再附带 token / refreshToken
         return LoginResponse.builder()
                 .uid(user.getUid())
+                .account(user.getAccount())
                 .nickname(user.getNickname())
                 .avatarUrl(user.getAvatarUrl())
                 .gender(user.getGender())
@@ -210,6 +219,7 @@ public class AuthService {
 
         return LoginResponse.builder()
                 .uid(user.getUid())
+                .account(user.getAccount())
                 .nickname(user.getNickname())
                 .avatarUrl(user.getAvatarUrl())
                 .gender(user.getGender())
@@ -292,7 +302,13 @@ public class AuthService {
             }
             user.setGender(weChatUser.getSex());
             user.setUnionId(tokenResp.getUnionId());
+            // loginType = 最近登录方式 → 老用户用微信登录则覆写为 WECHAT
+            user.setLoginType(User.LoginType.WECHAT);
             user.setLastLoginAt(LocalDateTime.now());
+            // 兜底补 account（极小概率：DataInitializer migration 后又有新用户漏补）
+            if (user.getAccount() == null || user.getAccount().isBlank()) {
+                user.setAccount(accountGenerator.generateUnique());
+            }
             return userRepository.save(user);
         }
 
@@ -300,10 +316,12 @@ public class AuthService {
                 LogUtils.mask(tokenResp.getOpenId()), LogUtils.mask(tokenResp.getUnionId()));
         User newUser = new User();
         newUser.setUid(UUID.randomUUID().toString().replace("-", ""));
+        newUser.setAccount(accountGenerator.generateUnique());
         newUser.setNickname(weChatUser.getNickname());
         // 微信端可能返回空头像（比如用户隐私设置），缺失时用 server 配置的默认头像兜底
         newUser.setAvatarUrl(resolveAvatarUrl(weChatUser.getHeadImgUrl()));
         newUser.setLoginType(User.LoginType.WECHAT);
+        newUser.setRegistrationSource(User.RegistrationSource.WECHAT);
         newUser.setOpenId(tokenResp.getOpenId());
         newUser.setUnionId(tokenResp.getUnionId());
         newUser.setGender(weChatUser.getSex());
@@ -327,18 +345,26 @@ public class AuthService {
         if (existing.isPresent()) {
             User user = existing.get();
             log.info("手机号老用户登录, uid={}, phone={}", user.getUid(), LogUtils.mask(phone));
+            // loginType = 最近登录方式 → 老用户用手机号登录则覆写为 PHONE
+            user.setLoginType(User.LoginType.PHONE);
             user.setLastLoginAt(LocalDateTime.now());
+            // 兜底补 account
+            if (user.getAccount() == null || user.getAccount().isBlank()) {
+                user.setAccount(accountGenerator.generateUnique());
+            }
             return userRepository.save(user);
         }
 
         log.info("手机号新用户注册, phone={}", LogUtils.mask(phone));
         User newUser = new User();
         newUser.setUid(UUID.randomUUID().toString().replace("-", ""));
+        newUser.setAccount(accountGenerator.generateUnique());
         // 默认昵称用手机号末 4 位脱敏，避免直接暴露用户标识
         newUser.setNickname("用户" + phone.substring(7));
         // 手机号注册无第三方头像源 → 直接用 server 配置的默认头像
         newUser.setAvatarUrl(resolveAvatarUrl(null));
         newUser.setLoginType(User.LoginType.PHONE);
+        newUser.setRegistrationSource(User.RegistrationSource.PHONE);
         newUser.setPhone(phone);
         newUser.setGender(0);
         newUser.setLastLoginAt(LocalDateTime.now());

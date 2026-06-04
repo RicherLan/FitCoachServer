@@ -53,13 +53,16 @@ public class PasswordService {
 
     // ====== 登录限流（本地 Caffeine 实现，单实例进程内有效） ======
     // 跨实例不一致 —— 多副本部署需迁 Redis，当前 V1 单机够用。
-    // phone 维度防对单账号枚举密码；IP 维度防同 IP 撒网爆破多账号。
+    // phone / account 维度防对单账号枚举密码；IP 维度防同 IP 撒网爆破多账号。
     private static final int PHONE_MAX_ATTEMPTS = 5;
+    private static final int ACCOUNT_MAX_ATTEMPTS = 5;
     private static final int IP_MAX_ATTEMPTS = 20;
     private static final Duration ATTEMPT_WINDOW = Duration.ofMinutes(15);
 
     private final LoginAttemptLimiter phoneLimiter =
             new LoginAttemptLimiter(PHONE_MAX_ATTEMPTS, ATTEMPT_WINDOW, 100_000);
+    private final LoginAttemptLimiter accountLimiter =
+            new LoginAttemptLimiter(ACCOUNT_MAX_ATTEMPTS, ATTEMPT_WINDOW, 100_000);
     private final LoginAttemptLimiter ipLimiter =
             new LoginAttemptLimiter(IP_MAX_ATTEMPTS, ATTEMPT_WINDOW, 50_000);
 
@@ -129,10 +132,9 @@ public class PasswordService {
                 throw new BusinessException(ResultCode.PASSWORD_LOGIN_FAILED);
             }
 
-            // 校验通过 → 复用 AuthService.phoneLogin 的"老用户登录"路径颁 token
-            // 注意：这里不能复用 phoneLogin 整体（它会 findOrCreate，密码登录不应自动创号）
-            // 所以走 buildLoginResponse 等价路径：直接走 authService 颁 token
-            LoginResponse resp = authService.phoneLogin(phone);
+            // 校验通过 → 走 loginExistingUser：仅颁 token / rotate sid / 更新 lastLoginAt + loginType=PHONE，
+            // 不会 findOrCreate（密码登录不允许自动创号）
+            LoginResponse resp = authService.loginExistingUser(user, User.LoginType.PHONE);
             // 登录成功 → 清零 phone 维度计数；IP 维度故意保留，防止单点突破后爆破其他账号
             phoneLimiter.reset(phone);
             log.info("密码登录成功, uid={}, phone={}", user.getUid(), LogUtils.mask(phone));
@@ -140,14 +142,80 @@ public class PasswordService {
         } catch (BusinessException e) {
             // 仅对"密码错误"类失败累计配额；账号禁用、限流自身不再加权（避免被攻击者利用做 DoS）
             if (e.getCode() == ResultCode.PASSWORD_LOGIN_FAILED.getCode()) {
-                recordFailure(phone, clientIp);
+                recordFailureByPhone(phone, clientIp);
             }
             throw e;
         }
     }
 
-    /** 累加双维度失败计数；任一为空 key 时静默跳过该维度。 */
-    private void recordFailure(String phone, String clientIp) {
+    /**
+     * 「账号 + 密码」登录 —— account 是 user 的内在唯一标识（{@link User#getAccount()}，8 位纯数字），
+     * 与手机号登录、微信登录解耦：任何一种方式注册的用户都会自动获得 account，
+     * 只要他们后续设置过密码，即可走此入口登录。
+     *
+     * <p><b>限流策略</b>（{@link LoginAttemptLimiter}）：
+     * <ul>
+     *   <li>account 维度：{@value #ACCOUNT_MAX_ATTEMPTS} 次失败 / {@code ATTEMPT_WINDOW}；</li>
+     *   <li>IP 维度：与 phone 登录共用同一 {@code ipLimiter}，进一步压低同 IP 总爆破带宽；</li>
+     *   <li>超限抛 {@link ResultCode#PASSWORD_LOGIN_RATE_LIMITED}。</li>
+     * </ul>
+     *
+     * <p><b>校验失败</b>一律回 {@link ResultCode#PASSWORD_LOGIN_FAILED}（与手机号密码登录复用同一码），
+     * 避免泄露"account 是否存在 / 是否设置过密码"。
+     *
+     * @param account  用户号（{@link User#getAccount()}）
+     * @param password 明文密码
+     * @param clientIp 客户端真实 IP；可为 null
+     */
+    @Transactional
+    public LoginResponse loginByAccount(String account, String password, String clientIp) {
+        // 1) 限流预检
+        if (account != null && !account.isBlank() && !accountLimiter.isAllowed(account)) {
+            log.warn("账号登录被限流（account 维度）, account={}", LogUtils.mask(account));
+            throw new BusinessException(ResultCode.PASSWORD_LOGIN_RATE_LIMITED);
+        }
+        if (clientIp != null && !clientIp.isBlank() && !ipLimiter.isAllowed(clientIp)) {
+            log.warn("账号登录被限流（IP 维度）, ip={}", LogUtils.mask(clientIp));
+            throw new BusinessException(ResultCode.PASSWORD_LOGIN_RATE_LIMITED);
+        }
+
+        try {
+            User user = userRepository.findByAccount(account)
+                    .orElseThrow(() -> {
+                        log.info("账号登录失败：account 不存在, account={}", LogUtils.mask(account));
+                        return new BusinessException(ResultCode.PASSWORD_LOGIN_FAILED);
+                    });
+
+            if (!Boolean.TRUE.equals(user.getEnabled())) {
+                log.warn("账号登录失败：用户已禁用, uid={}", user.getUid());
+                throw new BusinessException(ResultCode.USER_DISABLED);
+            }
+
+            String hash = user.getPasswordHash();
+            if (hash == null || hash.isBlank()) {
+                log.info("账号登录失败：未设置密码, uid={}", user.getUid());
+                throw new BusinessException(ResultCode.PASSWORD_LOGIN_FAILED);
+            }
+            if (!passwordEncoder.matches(password, hash)) {
+                log.info("账号登录失败：密码错误, uid={}", user.getUid());
+                throw new BusinessException(ResultCode.PASSWORD_LOGIN_FAILED);
+            }
+
+            // 校验通过 → 颁 token；loginType 写为 ACCOUNT 表示「最近一次走的是账号密码入口」
+            LoginResponse resp = authService.loginExistingUser(user, User.LoginType.ACCOUNT);
+            accountLimiter.reset(account);
+            log.info("账号登录成功, uid={}, account={}", user.getUid(), LogUtils.mask(account));
+            return resp;
+        } catch (BusinessException e) {
+            if (e.getCode() == ResultCode.PASSWORD_LOGIN_FAILED.getCode()) {
+                recordFailureByAccount(account, clientIp);
+            }
+            throw e;
+        }
+    }
+
+    /** 累加 phone + IP 双维度失败计数；任一为空 key 时静默跳过该维度。 */
+    private void recordFailureByPhone(String phone, String clientIp) {
         if (phone != null && !phone.isBlank()) {
             int after = phoneLimiter.recordFailure(phone);
             if (after >= PHONE_MAX_ATTEMPTS) {
@@ -155,6 +223,22 @@ public class PasswordService {
                         LogUtils.mask(phone), after, PHONE_MAX_ATTEMPTS);
             }
         }
+        recordIpFailure(clientIp);
+    }
+
+    /** 累加 account + IP 双维度失败计数。 */
+    private void recordFailureByAccount(String account, String clientIp) {
+        if (account != null && !account.isBlank()) {
+            int after = accountLimiter.recordFailure(account);
+            if (after >= ACCOUNT_MAX_ATTEMPTS) {
+                log.warn("账号登录失败次数达上限（account 维度）, account={}, count={}/{}",
+                        LogUtils.mask(account), after, ACCOUNT_MAX_ATTEMPTS);
+            }
+        }
+        recordIpFailure(clientIp);
+    }
+
+    private void recordIpFailure(String clientIp) {
         if (clientIp != null && !clientIp.isBlank()) {
             int after = ipLimiter.recordFailure(clientIp);
             if (after >= IP_MAX_ATTEMPTS) {

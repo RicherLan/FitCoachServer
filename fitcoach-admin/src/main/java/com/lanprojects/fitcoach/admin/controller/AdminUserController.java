@@ -2,7 +2,9 @@ package com.lanprojects.fitcoach.admin.controller;
 
 import com.lanprojects.fitcoach.admin.audit.AdminAuditAction;
 import com.lanprojects.fitcoach.admin.audit.AdminAuditLogService;
+import com.lanprojects.fitcoach.admin.dto.CreateUserRequest;
 import com.lanprojects.fitcoach.admin.dto.PageResponse;
+import com.lanprojects.fitcoach.admin.dto.ResetUserPasswordRequest;
 import com.lanprojects.fitcoach.admin.dto.UpdateUserStatusRequest;
 import com.lanprojects.fitcoach.admin.dto.UserDetailDto;
 import com.lanprojects.fitcoach.admin.dto.UserSummaryDto;
@@ -16,10 +18,12 @@ import com.lanprojects.fitcoach.login.entity.User;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
+import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
+import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
@@ -35,14 +39,17 @@ import java.util.List;
  * 用户管理（admin 后台）。
  * <p>路径前缀：/api/admin/users
  * <ul>
- *   <li>{@code GET /} —— 分页列表，支持 keyword / enabled / loginType 过滤</li>
+ *   <li>{@code GET /} —— 分页列表，支持 keyword（昵称/手机号/uid/account）/ enabled / loginType 过滤</li>
  *   <li>{@code GET /{uid}} —— 详情</li>
+ *   <li>{@code POST /} —— 手动创建用户（运营/客服/QA 内部账号），自动生成 account</li>
  *   <li>{@code PUT /{uid}/status} —— 启用 / 禁用</li>
+ *   <li>{@code POST /{uid}/reset-password} —— 重置用户密码（独立 audit 记录）</li>
+ *   <li>{@code GET /export} —— 按筛选条件导出 CSV</li>
  * </ul>
  * <p>所有写操作走 {@link AdminAuthInterceptor} 的角色拦截，VIEWER 直接被拒（7008）。
  */
 @Slf4j
-@Tag(name = "后台-用户管理", description = "C 端用户分页/详情/启停（VIEWER 只读）")
+@Tag(name = "后台-用户管理", description = "C 端用户分页/详情/创建/启停/重置密码（VIEWER 只读）")
 @RestController
 @RequestMapping("/api/admin/users")
 @RequiredArgsConstructor
@@ -77,6 +84,27 @@ public class AdminUserController {
         return Result.success(adminUserService.getUserDetail(uid));
     }
 
+    /**
+     * admin 后台手动创建 C 端用户（{@code registrationSource=ADMIN_CREATED}）。
+     * <p>account 由服务端 {@code AccountGenerator} 自动生成，admin 不可手动指定，避免靓号被滥用。
+     */
+    @PostMapping
+    public Result<UserDetailDto> create(HttpServletRequest request,
+                                        @Valid @RequestBody CreateUserRequest body) {
+        String operator = (String) request.getAttribute(AdminAuthInterceptor.ATTR_ADMIN_USERNAME);
+        try {
+            UserDetailDto dto = adminUserService.createUser(body, operator);
+            auditLogService.logSuccess(request, AdminAuditAction.CREATE_USER, "USER", dto.getUid(),
+                    String.format("account=%s, nickname=%s", dto.getAccount(), dto.getNickname()));
+            return Result.success(dto);
+        } catch (RuntimeException e) {
+            auditLogService.logFailure(request, AdminAuditAction.CREATE_USER, "USER", null,
+                    String.format("nickname=%s", body == null ? null : body.getNickname()),
+                    e.getMessage());
+            throw e;
+        }
+    }
+
     /** 启用 / 禁用用户 */
     @PutMapping("/{uid}/status")
     public Result<UserDetailDto> updateStatus(HttpServletRequest request,
@@ -95,6 +123,27 @@ public class AdminUserController {
         } catch (RuntimeException e) {
             auditLogService.logFailure(request, action, "USER", uid,
                     "set enabled=" + enabled, e.getMessage());
+            throw e;
+        }
+    }
+
+    /**
+     * 重置用户密码 —— 独立接口，单独 audit 一条 {@code RESET_USER_PASSWORD}。
+     * <p>summary 不会带密码明文 / 哈希，仅记录目标 uid。
+     */
+    @PostMapping("/{uid}/reset-password")
+    public Result<UserDetailDto> resetPassword(HttpServletRequest request,
+                                               @PathVariable("uid") String uid,
+                                               @Valid @RequestBody ResetUserPasswordRequest body) {
+        String operator = (String) request.getAttribute(AdminAuthInterceptor.ATTR_ADMIN_USERNAME);
+        try {
+            UserDetailDto dto = adminUserService.resetPassword(uid, body, operator);
+            auditLogService.logSuccess(request, AdminAuditAction.RESET_USER_PASSWORD, "USER", uid,
+                    String.format("account=%s", dto.getAccount()));
+            return Result.success(dto);
+        } catch (RuntimeException e) {
+            auditLogService.logFailure(request, AdminAuditAction.RESET_USER_PASSWORD, "USER", uid,
+                    "reset password", e.getMessage());
             throw e;
         }
     }
@@ -120,11 +169,13 @@ public class AdminUserController {
         log.info("导出用户 CSV, operator={}, rows={}", operator, users.size());
 
         CsvHttpResponseUtil.write(response, "users",
-                List.of("uid", "昵称", "登录方式", "性别", "手机号", "启用", "注册时间", "最后登录时间", "最后活跃时间"),
+                List.of("uid", "account", "昵称", "最近登录方式", "注册来源", "性别", "手机号", "启用", "注册时间", "最后登录时间", "最后活跃时间"),
                 users, u -> List.of(
                         nullToEmpty(u.getUid()),
+                        nullToEmpty(u.getAccount()),
                         nullToEmpty(u.getNickname()),
                         u.getLoginType() == null ? "" : u.getLoginType().name(),
+                        u.getRegistrationSource() == null ? "" : u.getRegistrationSource().name(),
                         u.getGender() == null ? "" : String.valueOf(u.getGender()),
                         maskPhone(u.getPhone()),
                         u.getEnabled() == null ? "" : (u.getEnabled() ? "是" : "否"),

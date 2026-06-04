@@ -19,9 +19,15 @@ import lombok.NoArgsConstructor;
 public class LoginResponse {
 
     /**
-     * 用户唯一标识
+     * 用户唯一标识（UUID，内部主键）
      */
     private String uid;
+
+    /**
+     * 用户号（{@link com.lanprojects.fitcoach.login.entity.User#account}）—— 8 位纯数字，
+     * 用户对外展示的"账号"，可用于「账号 + 密码」登录、客服查询、好友搜索。
+     */
+    private String account;
 
     /**
      * 昵称

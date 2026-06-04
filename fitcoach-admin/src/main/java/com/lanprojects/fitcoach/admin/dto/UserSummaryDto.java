@@ -12,9 +12,14 @@ import lombok.Data;
 @Builder
 public class UserSummaryDto {
     private String uid;
+    /** 用户号（{@link User#getAccount()}）—— 8 位纯数字，admin 后台搜索 / 客服查询主键 */
+    private String account;
     private String nickname;
     private String avatarUrl;
+    /** 最近一次登录方式（WECHAT / PHONE / ACCOUNT / GOOGLE / APPLE / ...） */
     private String loginType;
+    /** 注册来源（首次创建该 user 时的渠道），与 loginType 不同，本字段永不变更 */
+    private String registrationSource;
     private Integer gender;
     /** 手机号，已脱敏（中间 4 位 *） */
     private String phoneMasked;
@@ -29,9 +34,11 @@ public class UserSummaryDto {
     public static UserSummaryDto from(User user, String avatarUrlAbsolute, String phoneMasked) {
         return UserSummaryDto.builder()
                 .uid(user.getUid())
+                .account(user.getAccount())
                 .nickname(user.getNickname())
                 .avatarUrl(avatarUrlAbsolute)
                 .loginType(user.getLoginType() == null ? null : user.getLoginType().name())
+                .registrationSource(user.getRegistrationSource() == null ? null : user.getRegistrationSource().name())
                 .gender(user.getGender())
                 .phoneMasked(phoneMasked)
                 .enabled(user.getEnabled())

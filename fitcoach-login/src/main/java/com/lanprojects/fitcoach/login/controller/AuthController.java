@@ -4,18 +4,17 @@ import com.lanprojects.fitcoach.common.exception.BusinessException;
 import com.lanprojects.fitcoach.common.model.Result;
 import com.lanprojects.fitcoach.common.model.ResultCode;
 import com.lanprojects.fitcoach.common.security.ClientIpResolver;
+import com.lanprojects.fitcoach.login.dto.AccountLoginRequest;
 import com.lanprojects.fitcoach.login.dto.LoginResponse;
 import com.lanprojects.fitcoach.login.dto.PasswordLoginRequest;
 import com.lanprojects.fitcoach.login.dto.PhoneLoginRequest;
 import com.lanprojects.fitcoach.login.dto.RefreshTokenRequest;
 import com.lanprojects.fitcoach.login.dto.SendCodeRequest;
-import com.lanprojects.fitcoach.login.dto.TestLoginRequest;
 import com.lanprojects.fitcoach.login.dto.WeChatLoginRequest;
 import com.lanprojects.fitcoach.login.service.AuthService;
 import com.lanprojects.fitcoach.login.service.CaptchaService;
 import com.lanprojects.fitcoach.login.service.OtpService;
 import com.lanprojects.fitcoach.login.service.PasswordService;
-import com.lanprojects.fitcoach.login.service.TestLoginService;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.validation.Valid;
@@ -29,7 +28,7 @@ import org.springframework.web.bind.annotation.*;
  * 接口前缀：/api/auth
  */
 @Slf4j
-@Tag(name = "客户端-登录认证", description = "微信/手机号/密码登录、OTP 发送、token 刷新、修改密码")
+@Tag(name = "客户端-登录认证", description = "微信/手机号/账号密码登录、OTP 发送、token 刷新、修改密码")
 @RestController
 @RequestMapping("/api/auth")
 @RequiredArgsConstructor
@@ -41,7 +40,6 @@ public class AuthController {
     private final CaptchaService captchaService;
     private final OtpService otpService;
     private final PasswordService passwordService;
-    private final TestLoginService testLoginService;
 
     /**
      * 微信登录
@@ -104,18 +102,20 @@ public class AuthController {
     }
 
     /**
-     * 内部测试账号登录（dev/staging 包专用）
-     * <p>POST /api/auth/login/test
-     * <br>Body: { "account": "test1", "password": "123456" }
-     * <p><b>安全门控</b>：仅当 sys_config 中 {@code test_login.enabled=true} 时生效；
-     * 生产环境必须保持 false。校验失败统一回 7401 PASSWORD_LOGIN_FAILED，
-     * 不暴露"开关是否打开 / 账号是否存在 / 密码是否正确"等具体信号。
-     * <p>账号由 {@code DataInitializer} 启动时 seed（test_test1/test_test2/test_test3），
-     * 登录后颁发与微信/手机号登录完全一致的 access + refresh token。
+     * 账号 + 密码登录（用 {@code user.account} 作为账号）
+     * <p>POST /api/auth/login/account
+     * <br>Body: { "account": "12345678", "password": "Abc123!" }
+     * <p>account 是 user 的内在唯一标识，无论用户当初是微信 / 手机号 / Google / Apple 哪种方式注册，
+     * 只要在「账号安全」里设置过密码即可走此入口登录；与手机号密码登录平行存在，互不互斥。
+     * <p>校验失败统一回 7401 PASSWORD_LOGIN_FAILED，避免泄露"账号是否存在 / 是否设置过密码"。
      */
-    @PostMapping("/login/test")
-    public Result<LoginResponse> testLogin(@Valid @RequestBody TestLoginRequest request) {
-        return Result.success(testLoginService.login(request.getAccount(), request.getPassword()));
+    @PostMapping("/login/account")
+    public Result<LoginResponse> accountLogin(
+            @Valid @RequestBody AccountLoginRequest request,
+            HttpServletRequest httpRequest) {
+        String clientIp = ClientIpResolver.resolve(httpRequest);
+        return Result.success(passwordService.loginByAccount(
+                request.getAccount(), request.getPassword(), clientIp));
     }
 
     /**

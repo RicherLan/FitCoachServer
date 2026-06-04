@@ -13,9 +13,16 @@ import lombok.Data;
 @Builder
 public class UserDetailDto {
     private String uid;
+    /** 用户号（{@link User#getAccount()}）—— 8 位纯数字 */
+    private String account;
     private String nickname;
     private String avatarUrl;
+    /** 最近一次登录方式 */
     private String loginType;
+    /** 注册来源（首次创建该 user 时的渠道），与 loginType 不同，本字段永不变更 */
+    private String registrationSource;
+    /** 是否设置过登录密码（C 端用户「账号安全 → 设置密码」） */
+    private Boolean passwordSet;
     private Integer gender;
     private String phone;       // 后台允许查看完整手机号（业务必要）
     private String email;
@@ -35,9 +42,12 @@ public class UserDetailDto {
     public static UserDetailDto from(User user, String avatarUrlAbsolute, long feedbackCount) {
         return UserDetailDto.builder()
                 .uid(user.getUid())
+                .account(user.getAccount())
                 .nickname(user.getNickname())
                 .avatarUrl(avatarUrlAbsolute)
                 .loginType(user.getLoginType() == null ? null : user.getLoginType().name())
+                .registrationSource(user.getRegistrationSource() == null ? null : user.getRegistrationSource().name())
+                .passwordSet(user.getPasswordHash() != null && !user.getPasswordHash().isBlank())
                 .gender(user.getGender())
                 .phone(user.getPhone())
                 .email(user.getEmail())

@@ -19,15 +19,33 @@ import java.time.LocalDateTime;
         @Index(name = "uk_open_id", columnList = "open_id", unique = true),
         @Index(name = "uk_union_id", columnList = "union_id", unique = true),
         // phone 允许 NULL；MySQL 上 unique 索引允许多个 NULL，因此微信登录用户的 phone=null 不会冲突
-        @Index(name = "uk_phone", columnList = "phone", unique = true)
+        @Index(name = "uk_phone", columnList = "phone", unique = true),
+        // account：用户的内在唯一标识（类似小红书号），所有登录方式（微信/手机/Google/Apple/账号密码）
+        // 都最终落到一行 user 上；admin 后台、客服查询、未来好友搜索均以 account 为入口
+        @Index(name = "uk_account", columnList = "account", unique = true)
 })
 public class User extends BaseEntity {
 
     /**
-     * 用户唯一标识（UUID）
+     * 用户唯一标识（UUID）—— 内部主键属性，不暴露给终端用户。
+     * <p>所有外部展示 / 用户输入的"用户号"统一使用 {@link #account} 字段。
      */
     @Column(name = "uid", nullable = false, unique = true, length = 64)
     private String uid;
+
+    /**
+     * 用户号（类似小红书号）：8 位纯数字、首位 1-9、全局唯一、终身不变。
+     * <p>由 {@code AccountGenerator} 在用户首次注册时（无论何种登录方式）随机生成。
+     * <p>用途：
+     * <ul>
+     *   <li>「账号 + 密码」登录入口的账号；密码由用户在「账号安全 → 设置密码」中自行设置。</li>
+     *   <li>admin 后台 / 客服查询用户的主键。</li>
+     *   <li>未来好友 / 教练搜索的对外标识。</li>
+     * </ul>
+     * <p>注意：新注册自动生成、不允许用户修改、不可重复使用。
+     */
+    @Column(name = "account", length = 16, unique = true)
+    private String account;
 
     /**
      * 昵称
@@ -42,12 +60,22 @@ public class User extends BaseEntity {
     private String avatarUrl;
 
     /**
-     * 登录方式：WECHAT / PHONE / EMAIL / GUEST / GOOGLE / APPLE
-     * <p>注意：表示"账号注册时的首选登录方式"，用户后续可能绑定多种登录方式。
+     * 最近一次成功登录使用的登录方式：WECHAT / PHONE / EMAIL / GOOGLE / APPLE / ACCOUNT / GUEST。
+     * <p>每次登录成功时由 {@code AuthService} 更新；用于 admin 后台展示与运营分析，
+     * 不参与业务路由（同一 user 可同时绑定多种登录方式）。
+     * <p>用户的"内在身份"由 {@link #account} 承载，与本字段独立。
      */
     @Column(name = "login_type", nullable = false, length = 20)
     @Enumerated(EnumType.STRING)
     private LoginType loginType;
+
+    /**
+     * 注册来源（首次创建 user 的登录方式 / 渠道），与 {@link #loginType} 不同，本字段一旦写入永不变更。
+     * <p>用于运营分析（如"通过微信注册的用户占比"），以及客服追溯账号来源。
+     */
+    @Column(name = "registration_source", length = 20)
+    @Enumerated(EnumType.STRING)
+    private RegistrationSource registrationSource;
 
     /**
      * 第三方平台 openid
@@ -148,7 +176,7 @@ public class User extends BaseEntity {
     private LocalDateTime currentLoginAt;
 
     /**
-     * 登录方式枚举
+     * 登录方式枚举 —— 表示「最近一次成功登录使用的方式」。
      * <p>新增登录方式时只需在此处加值 + 实现对应 Service/Controller，
      * 数据库列已通过 {@code @Enumerated(EnumType.STRING)} 兼容新值。
      */
@@ -160,10 +188,33 @@ public class User extends BaseEntity {
         GOOGLE,
         APPLE,
         /**
-         * 内部测试账号登录（仅 dev/staging 包 + sys_config 开关打开时启用）。
-         * <p>通过 /api/auth/login/test 接口走用户名 + 密码校验，账号由 {@code DataInitializer}
-         * 启动时 seed（uid 形如 {@code test_test1}）。生产环境必须关闭对应开关。
+         * 「账号 + 密码」登录方式：账号即 {@link User#account}，密码即 {@link User#passwordHash}。
+         * <p>该方式不会单独创建新 user —— 任何一种渠道注册的用户都会自动获得 account，
+         * 只要他们后续设置过密码，即可走此入口登录。
          */
+        ACCOUNT,
+        /**
+         * @deprecated 历史「内部测试账号」登录类型。线上已迁移到 ACCOUNT；
+         * 仅为兼容历史数据库行的反序列化保留（{@code DataInitializer} 启动时会把 TEST 改写为 ACCOUNT）。
+         * 后续维护中若确认数据库已无 TEST 行，可安全删除该枚举值。
+         */
+        @Deprecated
         TEST
+    }
+
+    /**
+     * 注册来源枚举 —— 表示「该 user 首次被创建时的渠道」，一旦写入永不变更。
+     */
+    public enum RegistrationSource {
+        WECHAT,
+        PHONE,
+        EMAIL,
+        GOOGLE,
+        APPLE,
+        GUEST,
+        /** admin 后台手动创建（运营 / 客服内部账号、QA 测试账号等） */
+        ADMIN_CREATED,
+        /** 历史数据 —— DataInitializer 启动时为缺失字段的旧 user 统一补此值 */
+        LEGACY
     }
 }

@@ -5,22 +5,21 @@ import com.lanprojects.fitcoach.common.config.repository.SysConfigRepository;
 import com.lanprojects.fitcoach.common.config.service.ConfigCryptoService;
 import com.lanprojects.fitcoach.login.entity.User;
 import com.lanprojects.fitcoach.login.repository.UserRepository;
-import com.lanprojects.fitcoach.login.service.TestLoginService;
+import com.lanprojects.fitcoach.login.service.AccountGenerator;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.boot.CommandLineRunner;
-import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.stereotype.Component;
+import org.springframework.transaction.annotation.Transactional;
 
 import java.security.SecureRandom;
-import java.time.LocalDateTime;
 import java.util.Base64;
 import java.util.List;
 
 /**
- * 数据初始化器 — 应用首次启动时写入默认配置
+ * 数据初始化器 — 应用首次启动时写入默认配置 + 历史数据 migration
  * <p>
- * 只在配置项不存在时插入，不会覆盖已有值。
+ * 配置只在 key 不存在时插入，不会覆盖已有值。
  * 管理员后续通过后台管理平台修改这些配置。
  * <p>
  * <b>安全相关：</b>
@@ -29,21 +28,28 @@ import java.util.List;
  *   <li>微信 AppSecret 标记为 encrypted=true，由 SysConfigService 自动加解密；</li>
  *   <li>Access token 默认 2 小时；refresh token 默认 7 天。</li>
  * </ul>
+ *
+ * <b>账号体系 migration（一次性）：</b>
+ * <ul>
+ *   <li>给所有 {@code account == null} 的老用户生成 8 位纯数字 account；</li>
+ *   <li>把 {@code loginType == TEST} 的历史用户改写为 {@code ACCOUNT}；</li>
+ *   <li>给所有 {@code registrationSource == null} 的老用户统一打上 {@code LEGACY} 标签。</li>
+ * </ul>
+ * 该 migration 幂等：再次启动跳过已补齐的行。
+ *
+ * <p>历史的「test_login.enabled 系统配置」+「默认 test1/test2/test3 seed 账号」均已在
+ * 账号体系重构中下线 —— 现在所有内部 / QA 账号统一通过 admin 后台「用户管理 → 创建用户」
+ * 入口生成，account 由 server 端 {@code AccountGenerator} 自动分配。
  */
 @Slf4j
 @Component
 @RequiredArgsConstructor
 public class DataInitializer implements CommandLineRunner {
 
-    /** 默认 seed 出来的 3 个测试账号，与客户端 {@code TEST_ACCOUNTS} 一一对应 */
-    private static final List<String> DEFAULT_TEST_ACCOUNTS = List.of("test1", "test2", "test3");
-    /** 测试账号的默认密码（首次 seed 时写入，后续可通过 admin 后台改） */
-    private static final String DEFAULT_TEST_PASSWORD = "123456";
-
     private final SysConfigRepository sysConfigRepository;
     private final ConfigCryptoService configCryptoService;
     private final UserRepository userRepository;
-    private final BCryptPasswordEncoder passwordEncoder;
+    private final AccountGenerator accountGenerator;
 
     private final SecureRandom secureRandom = new SecureRandom();
 
@@ -72,55 +78,73 @@ public class DataInitializer implements CommandLineRunner {
                 "jwt.refresh_expire_hours", "168",
                 "jwt", "Refresh token 过期时间（小时），默认 7 天"));
 
-        // ====== 内部测试账号登录开关 ======
-        // 默认 false（关闭）；开发/staging 环境运维在 admin 后台改 true 才能让客户端"测试账号登录"工作。
-        // 关键：生产环境必须保持 false，防止攻击者枚举 test1/test2/test3 走密码爆破。
-        inserted += ensureExists(new SysConfig(
-                TestLoginService.CONFIG_TEST_LOGIN_ENABLED, "false",
-                "test_login", "内部测试账号登录开关（dev/staging 用，生产必须 false）"));
-
         if (inserted > 0) {
             log.info("初始化完成，新增 {} 项配置", inserted);
         } else {
             log.info("配置已存在，跳过初始化");
         }
 
-        // ====== 测试账号 seed ======
-        // 即使开关关着，账号本身也提前 seed，让"打开开关即可登录"做到秒级生效；
-        // 关闭开关时账号存在也无法被外部利用 —— TestLoginService 在最前面就拦住了。
-        int seededAccounts = seedTestAccounts();
-        if (seededAccounts > 0) {
-            log.info("测试账号初始化完成，新增 {} 个", seededAccounts);
+        // ====== 历史用户数据 migration ======
+        // 一次性把老 user 的 account / loginType=TEST / registrationSource 三个字段补齐。
+        // 幂等：再次启动会跳过已补齐的行。
+        int migrated = migrateLegacyUsers();
+        if (migrated > 0) {
+            log.info("[migration] 补齐历史用户字段, count={}", migrated);
         } else {
-            log.info("测试账号已存在，跳过初始化");
+            log.info("[migration] 历史用户均已补齐，跳过 migration");
         }
     }
 
     /**
-     * 按 {@link #DEFAULT_TEST_ACCOUNTS} 列表 seed 测试账号到 user 表。
-     * <p>uid 形如 {@code test_test1}，对应 {@link TestLoginService#TEST_UID_PREFIX} + 短账号名。
-     * <p>已存在的账号跳过（避免覆盖管理员后续手动改的密码），返回新插入条数。
+     * 对所有缺失新字段的历史用户做一次性 migration。
+     * <p>策略：
+     * <ul>
+     *   <li>account == null → 调 {@link AccountGenerator#generateUnique()} 生成；</li>
+     *   <li>loginType == TEST → 改为 {@link User.LoginType#ACCOUNT}；</li>
+     *   <li>registrationSource == null → 写入 {@link User.RegistrationSource#LEGACY}。</li>
+     * </ul>
+     * 一次启动可能改不完（如生成 account 时唯一索引冲突），下次启动会继续补；
+     * 由 {@link AccountGenerator} 内置 16 次重试和 unique 索引保底，正常不会有死循环。
+     *
+     * @return 本次实际写库的用户数（仅统计真正发生变更的行）
      */
-    private int seedTestAccounts() {
-        int inserted = 0;
-        for (String account : DEFAULT_TEST_ACCOUNTS) {
-            String uid = TestLoginService.TEST_UID_PREFIX + account;
-            if (userRepository.findByUid(uid).isPresent()) {
-                continue;
+    @Transactional
+    protected int migrateLegacyUsers() {
+        List<User> all = userRepository.findAll();
+        int count = 0;
+        for (User user : all) {
+            boolean dirty = false;
+
+            // 兼容历史 TEST 数据：统一改写为 ACCOUNT；保留原 passwordHash，仍可用账号 + 密码登录
+            if (user.getLoginType() == User.LoginType.TEST) {
+                user.setLoginType(User.LoginType.ACCOUNT);
+                dirty = true;
             }
-            User user = new User();
-            user.setUid(uid);
-            user.setNickname("测试账号 " + account.replace("test", ""));
-            user.setLoginType(User.LoginType.TEST);
-            user.setPasswordHash(passwordEncoder.encode(DEFAULT_TEST_PASSWORD));
-            user.setEnabled(true);
-            user.setGender(0);
-            user.setLastLoginAt(LocalDateTime.now());
-            userRepository.save(user);
-            log.info("初始化测试账号: uid={}（默认密码：{}）", uid, DEFAULT_TEST_PASSWORD);
-            inserted++;
+
+            // 注册来源缺失 → 统一打 LEGACY 标签，便于运营区分历史用户
+            if (user.getRegistrationSource() == null) {
+                user.setRegistrationSource(User.RegistrationSource.LEGACY);
+                dirty = true;
+            }
+
+            // 关键：account 是新引入的"内在唯一标识"，所有老用户必须补
+            if (user.getAccount() == null || user.getAccount().isBlank()) {
+                try {
+                    user.setAccount(accountGenerator.generateUnique());
+                    dirty = true;
+                } catch (RuntimeException e) {
+                    // 单个 user 生成失败不阻塞整体 migration —— 下次启动重试
+                    log.warn("[migration] 给用户生成 account 失败, uid={}, msg={}",
+                            user.getUid(), e.getMessage());
+                }
+            }
+
+            if (dirty) {
+                userRepository.save(user);
+                count++;
+            }
         }
-        return inserted;
+        return count;
     }
 
     private int ensureExists(SysConfig config) {

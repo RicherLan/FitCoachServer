@@ -1,6 +1,8 @@
 package com.lanprojects.fitcoach.admin.service;
 
+import com.lanprojects.fitcoach.admin.dto.CreateUserRequest;
 import com.lanprojects.fitcoach.admin.dto.PageResponse;
+import com.lanprojects.fitcoach.admin.dto.ResetUserPasswordRequest;
 import com.lanprojects.fitcoach.admin.dto.UpdateUserStatusRequest;
 import com.lanprojects.fitcoach.admin.dto.UserDetailDto;
 import com.lanprojects.fitcoach.admin.dto.UserSummaryDto;
@@ -9,6 +11,7 @@ import com.lanprojects.fitcoach.common.model.ResultCode;
 import com.lanprojects.fitcoach.feedback.repository.UserFeedbackRepository;
 import com.lanprojects.fitcoach.login.entity.User;
 import com.lanprojects.fitcoach.login.repository.UserRepository;
+import com.lanprojects.fitcoach.login.service.AccountGenerator;
 import jakarta.persistence.criteria.Predicate;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -16,11 +19,14 @@ import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Sort;
 import org.springframework.data.jpa.domain.Specification;
+import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.UUID;
 
 /**
  * 管理员侧用户管理 Service。
@@ -46,6 +52,8 @@ public class AdminUserService {
     private final UserRepository userRepository;
     private final UserFeedbackRepository userFeedbackRepository;
     private final AdminUrlService adminUrlService;
+    private final AccountGenerator accountGenerator;
+    private final BCryptPasswordEncoder passwordEncoder;
 
     /**
      * 分页查询用户列表
@@ -59,26 +67,7 @@ public class AdminUserService {
         int safeSize = Math.min(Math.max(size, 1), MAX_PAGE_SIZE);
         int safePage = Math.max(page, 1) - 1;  // 入参 1-based → Spring 0-based
 
-        Specification<User> spec = (root, query, cb) -> {
-            List<Predicate> ps = new ArrayList<>();
-            if (keyword != null && !keyword.isBlank()) {
-                String like = "%" + keyword.trim() + "%";
-                ps.add(cb.or(
-                        cb.like(root.get("nickname"), like),
-                        cb.like(root.get("phone"), like),
-                        cb.like(root.get("uid"), like)
-                ));
-            }
-            if (enabled != null) {
-                ps.add(cb.equal(root.get("enabled"), enabled));
-            }
-            if (loginType != null) {
-                ps.add(cb.equal(root.get("loginType"), loginType));
-            }
-            return ps.isEmpty() ? cb.conjunction() : cb.and(ps.toArray(new Predicate[0]));
-        };
-
-        Page<User> p = userRepository.findAll(spec,
+        Page<User> p = userRepository.findAll(buildSpec(keyword, enabled, loginType),
                 PageRequest.of(safePage, safeSize, Sort.by(Sort.Direction.DESC, "createdAt")));
         return PageResponse.from(p, u -> UserSummaryDto.from(
                 u, adminUrlService.resolve(u.getAvatarUrl()), maskPhone(u.getPhone())));
@@ -91,14 +80,22 @@ public class AdminUserService {
      * <p>返回 entity 而非 DTO —— 让 controller 决定脱敏 / 字段顺序 / 表头文案。
      */
     public List<User> exportUsers(String keyword, Boolean enabled, User.LoginType loginType) {
-        Specification<User> spec = (root, query, cb) -> {
+        Page<User> p = userRepository.findAll(buildSpec(keyword, enabled, loginType),
+                PageRequest.of(0, MAX_EXPORT_SIZE, Sort.by(Sort.Direction.DESC, "createdAt")));
+        return p.getContent();
+    }
+
+    /** 列表 / 导出共用的 Spec：keyword 对 nickname/phone/uid/account 做模糊匹配。 */
+    private Specification<User> buildSpec(String keyword, Boolean enabled, User.LoginType loginType) {
+        return (root, query, cb) -> {
             List<Predicate> ps = new ArrayList<>();
             if (keyword != null && !keyword.isBlank()) {
                 String like = "%" + keyword.trim() + "%";
                 ps.add(cb.or(
                         cb.like(root.get("nickname"), like),
                         cb.like(root.get("phone"), like),
-                        cb.like(root.get("uid"), like)
+                        cb.like(root.get("uid"), like),
+                        cb.like(root.get("account"), like)
                 ));
             }
             if (enabled != null) {
@@ -109,9 +106,66 @@ public class AdminUserService {
             }
             return ps.isEmpty() ? cb.conjunction() : cb.and(ps.toArray(new Predicate[0]));
         };
-        Page<User> p = userRepository.findAll(spec,
-                PageRequest.of(0, MAX_EXPORT_SIZE, Sort.by(Sort.Direction.DESC, "createdAt")));
-        return p.getContent();
+    }
+
+    /**
+     * admin 后台手动创建 C 端用户。
+     *
+     * <p>用途：运营 / 客服内部账号、QA 测试账号。
+     * <p>语义：
+     * <ul>
+     *   <li>{@code account} 由 {@link AccountGenerator} 生成，与微信 / 手机号注册路径完全一致；</li>
+     *   <li>{@code registrationSource = ADMIN_CREATED}，与普通用户区分；</li>
+     *   <li>{@code loginType = ACCOUNT}，表示该账号的首选登录方式是账号 + 密码；</li>
+     *   <li>{@code passwordHash} 由 BCrypt 哈希后写入。</li>
+     * </ul>
+     */
+    @Transactional
+    public UserDetailDto createUser(CreateUserRequest req, String operator) {
+        if (req == null || req.getNickname() == null || req.getPassword() == null) {
+            throw new BusinessException(ResultCode.BAD_REQUEST, "昵称和密码不能为空");
+        }
+        User user = new User();
+        user.setUid(UUID.randomUUID().toString().replace("-", ""));
+        user.setAccount(accountGenerator.generateUnique());
+        user.setNickname(req.getNickname().trim());
+        user.setLoginType(User.LoginType.ACCOUNT);
+        user.setRegistrationSource(User.RegistrationSource.ADMIN_CREATED);
+        user.setPasswordHash(passwordEncoder.encode(req.getPassword()));
+        user.setEnabled(true);
+        user.setGender(0);
+        user.setLastLoginAt(LocalDateTime.now());
+        try {
+            User saved = userRepository.save(user);
+            log.info("[admin] {} 创建用户, uid={}, account={}",
+                    operator, saved.getUid(), saved.getAccount());
+            long feedbackCount = userFeedbackRepository.countByUid(saved.getUid());
+            return UserDetailDto.from(saved, adminUrlService.resolve(saved.getAvatarUrl()), feedbackCount);
+        } catch (org.springframework.dao.DataIntegrityViolationException e) {
+            // 极小概率：AccountGenerator 之后并发再被抢占；回 ACCOUNT_DUPLICATE 让 admin 重试一次
+            log.warn("[admin] 创建用户冲突（疑似 account 唯一索引冲突）, operator={}, msg={}",
+                    operator, e.getMessage());
+            throw new BusinessException(ResultCode.ADMIN_USER_ACCOUNT_DUPLICATE);
+        }
+    }
+
+    /**
+     * admin 后台重置用户密码 —— 覆盖 {@code passwordHash}，独立 audit 记录。
+     * <p>不影响 user 当前的 token（暂未实现 token 黑名单；如需立即踢登录，可配合启停操作）。
+     */
+    @Transactional
+    public UserDetailDto resetPassword(String uid, ResetUserPasswordRequest req, String operator) {
+        if (req == null || req.getPassword() == null
+                || req.getPassword().length() < 6 || req.getPassword().length() > 64) {
+            throw new BusinessException(ResultCode.ADMIN_USER_PASSWORD_INVALID);
+        }
+        User user = userRepository.findByUid(uid)
+                .orElseThrow(() -> new BusinessException(ResultCode.ADMIN_USER_TARGET_NOT_FOUND));
+        user.setPasswordHash(passwordEncoder.encode(req.getPassword()));
+        userRepository.save(user);
+        log.info("[admin] {} 重置用户密码, uid={}", operator, uid);
+        long feedbackCount = userFeedbackRepository.countByUid(uid);
+        return UserDetailDto.from(user, adminUrlService.resolve(user.getAvatarUrl()), feedbackCount);
     }
 
     /** 用户详情 */

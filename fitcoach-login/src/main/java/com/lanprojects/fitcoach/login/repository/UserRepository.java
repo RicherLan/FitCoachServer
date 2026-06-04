@@ -25,7 +25,11 @@ public interface UserRepository
 
     Optional<User> findByPhone(String phone);
 
+    Optional<User> findByAccount(String account);
+
     boolean existsByOpenId(String openId);
+
+    boolean existsByAccount(String account);
 
     /** 后台 Dashboard：按时间区间统计新增用户数（含 from，不含 to） */
     long countByCreatedAtBetween(LocalDateTime from, LocalDateTime to);
