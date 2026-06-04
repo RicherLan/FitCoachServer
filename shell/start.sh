@@ -13,6 +13,7 @@
 #   bash shell/start.sh --profile prod # 指定 profile
 #   bash shell/start.sh --with-tests   # 编译时不跳过测试
 #   bash shell/start.sh --skip-build   # 跳过编译，直接用上次的 jar 起
+#   bash shell/start.sh --pull         # 先 git pull --ff-only 再编译重启
 #
 # 日志：
 #   shell/run/server.out  应用 stdout/stderr（同时 logback 写 logs/）
@@ -44,6 +45,7 @@ HEALTH_TIMEOUT_SECONDS=60
 PROFILE="dev"
 SKIP_TESTS=true
 SKIP_BUILD=false
+DO_PULL=false
 
 while [[ $# -gt 0 ]]; do
     case "$1" in
@@ -59,8 +61,12 @@ while [[ $# -gt 0 ]]; do
             SKIP_BUILD=true
             shift
             ;;
+        --pull)
+            DO_PULL=true
+            shift
+            ;;
         -h|--help)
-            sed -n '2,28p' "$0"
+            sed -n '2,29p' "$0"
             exit 0
             ;;
         *)
@@ -72,30 +78,68 @@ done
 
 mkdir -p "$RUN_DIR"
 
+# 动态步骤计数（--pull 时多一步）
+TOTAL_STEPS=4
+if [[ "$DO_PULL" == "true" ]]; then
+    TOTAL_STEPS=5
+fi
+STEP=0
+next_step() {
+    STEP=$((STEP + 1))
+    echo -e "${YELLOW}[${STEP}/${TOTAL_STEPS}] $*${NC}"
+}
+
 echo -e "${BLUE}=====================================================${NC}"
 echo -e "${BLUE}  FitCoach Server — 编译 + 启动${NC}"
-echo -e "${BLUE}  profile=${PROFILE} | port=${APP_PORT} | skipTests=${SKIP_TESTS}${NC}"
+echo -e "${BLUE}  profile=${PROFILE} | port=${APP_PORT} | skipTests=${SKIP_TESTS} | pull=${DO_PULL}${NC}"
 echo -e "${BLUE}=====================================================${NC}"
 echo ""
 
 # ---------- Step 1: 先停旧进程 ----------
-echo -e "${YELLOW}[1/4] 先停旧进程...${NC}"
+next_step "先停旧进程..."
 bash "$SCRIPT_DIR/stop.sh" || {
     echo -e "${RED}❌ 停止旧进程失败，请手动排查后重试${NC}"
     exit 1
 }
 echo ""
 
-# ---------- Step 2: 编译 ----------
+# ---------- Step 2 (可选): git pull ----------
+if [[ "$DO_PULL" == "true" ]]; then
+    next_step "git pull --ff-only 拉取最新代码..."
+    cd "$PROJECT_DIR"
+
+    if ! git rev-parse --git-dir &>/dev/null; then
+        echo -e "${RED}❌ 当前目录不是 git 仓库: $PROJECT_DIR${NC}"
+        exit 1
+    fi
+
+    CURRENT_BRANCH=$(git rev-parse --abbrev-ref HEAD)
+    echo -e "   当前分支: ${CURRENT_BRANCH}"
+
+    if ! git diff-index --quiet HEAD -- 2>/dev/null; then
+        echo -e "${YELLOW}⚠️  工作区有未提交改动（pull 仍会尝试，冲突时会失败回滚）${NC}"
+        git status --short
+    fi
+
+    if ! git pull --ff-only; then
+        echo -e "${RED}❌ git pull --ff-only 失败${NC}"
+        echo -e "${RED}   可能本地与远端有分叉，需手动 rebase/merge 后重跑${NC}"
+        exit 1
+    fi
+    echo -e "${GREEN}✅ 代码已更新到最新（HEAD=$(git rev-parse --short HEAD)）${NC}"
+    echo ""
+fi
+
+# ---------- Step 3: 编译 ----------
 if [[ "$SKIP_BUILD" == "true" ]]; then
-    echo -e "${YELLOW}[2/4] --skip-build 已指定，跳过编译${NC}"
+    next_step "--skip-build 已指定，跳过编译"
     if [[ ! -f "$APP_JAR" ]]; then
         echo -e "${RED}❌ jar 不存在: $APP_JAR${NC}"
         echo -e "${RED}   请先去掉 --skip-build 跑一次完整编译${NC}"
         exit 1
     fi
 else
-    echo -e "${YELLOW}[2/4] mvn clean package 编译中（fat jar）...${NC}"
+    next_step "mvn clean package 编译中（fat jar）..."
     cd "$PROJECT_DIR"
 
     if [[ -f "./mvnw" ]]; then
@@ -126,8 +170,8 @@ else
 fi
 echo ""
 
-# ---------- Step 3: 后台启动 ----------
-echo -e "${YELLOW}[3/4] 后台启动应用...${NC}"
+# ---------- Step 4: 后台启动 ----------
+next_step "后台启动应用..."
 
 # JVM 参数（生产可通过环境变量覆盖）
 JAVA_OPTS="${JAVA_OPTS:--Xms256m -Xmx1g -XX:+UseG1GC}"
@@ -147,8 +191,8 @@ echo -e "   日志: $LOG_FILE"
 echo -e "   PID 文件: $PID_FILE"
 echo ""
 
-# ---------- Step 4: 健康检查 ----------
-echo -e "${YELLOW}[4/4] 等待应用就绪（最多 ${HEALTH_TIMEOUT_SECONDS}s）...${NC}"
+# ---------- Step 5: 健康检查 ----------
+next_step "等待应用就绪（最多 ${HEALTH_TIMEOUT_SECONDS}s）..."
 WAITED=0
 while true; do
     # 进程意外退出（端口冲突 / 配置错 / OOM 等）→ 立刻 dump 日志尾部并退出
