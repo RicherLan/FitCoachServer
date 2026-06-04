@@ -98,6 +98,22 @@ public class AuthService {
     }
 
     /**
+     * 对外暴露的"已存在用户登录"通用入口 —— 由特殊登录方式（如内部测试账号登录
+     * {@link TestLoginService}）调用，复用 {@link #buildLoginResponse(User)} 的
+     * sessionId 滚动 / JWT 签发逻辑，避免每个登录入口都重复造轮子。
+     * <p>调用方需自己完成"用户存在性 + 账号启用 + 凭证校验"，本方法只负责"刷新最近登录时间 + 颁 token"。
+     *
+     * @param user 已通过校验的 user，不能为 null
+     * @return 完整 LoginResponse（含 access/refresh token）
+     */
+    @Transactional
+    public LoginResponse loginExistingUser(User user) {
+        user.setLastLoginAt(LocalDateTime.now());
+        userRepository.save(user);
+        return buildLoginResponse(user);
+    }
+
+    /**
      * 通过 access token 获取当前用户信息。
      * <p>同时校验单设备登录互踢：jwt.sid 与 user.currentSessionId 不一致即抛
      * {@link ResultCode#SESSION_KICKED}。无 sid claim 的老 token 跳过该校验（向后兼容）。

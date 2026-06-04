@@ -158,6 +158,12 @@ public class User extends BaseEntity {
         EMAIL,
         GUEST,
         GOOGLE,
-        APPLE
+        APPLE,
+        /**
+         * 内部测试账号登录（仅 dev/staging 包 + sys_config 开关打开时启用）。
+         * <p>通过 /api/auth/login/test 接口走用户名 + 密码校验，账号由 {@code DataInitializer}
+         * 启动时 seed（uid 形如 {@code test_test1}）。生产环境必须关闭对应开关。
+         */
+        TEST
     }
 }

@@ -9,11 +9,13 @@ import com.lanprojects.fitcoach.login.dto.PasswordLoginRequest;
 import com.lanprojects.fitcoach.login.dto.PhoneLoginRequest;
 import com.lanprojects.fitcoach.login.dto.RefreshTokenRequest;
 import com.lanprojects.fitcoach.login.dto.SendCodeRequest;
+import com.lanprojects.fitcoach.login.dto.TestLoginRequest;
 import com.lanprojects.fitcoach.login.dto.WeChatLoginRequest;
 import com.lanprojects.fitcoach.login.service.AuthService;
 import com.lanprojects.fitcoach.login.service.CaptchaService;
 import com.lanprojects.fitcoach.login.service.OtpService;
 import com.lanprojects.fitcoach.login.service.PasswordService;
+import com.lanprojects.fitcoach.login.service.TestLoginService;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.validation.Valid;
@@ -39,6 +41,7 @@ public class AuthController {
     private final CaptchaService captchaService;
     private final OtpService otpService;
     private final PasswordService passwordService;
+    private final TestLoginService testLoginService;
 
     /**
      * 微信登录
@@ -98,6 +101,21 @@ public class AuthController {
         // 防止单账号枚举密码 / 同 IP 撒网爆破多账号。
         String clientIp = ClientIpResolver.resolve(httpRequest);
         return Result.success(passwordService.login(request.getPhone(), request.getPassword(), clientIp));
+    }
+
+    /**
+     * 内部测试账号登录（dev/staging 包专用）
+     * <p>POST /api/auth/login/test
+     * <br>Body: { "account": "test1", "password": "123456" }
+     * <p><b>安全门控</b>：仅当 sys_config 中 {@code test_login.enabled=true} 时生效；
+     * 生产环境必须保持 false。校验失败统一回 7401 PASSWORD_LOGIN_FAILED，
+     * 不暴露"开关是否打开 / 账号是否存在 / 密码是否正确"等具体信号。
+     * <p>账号由 {@code DataInitializer} 启动时 seed（test_test1/test_test2/test_test3），
+     * 登录后颁发与微信/手机号登录完全一致的 access + refresh token。
+     */
+    @PostMapping("/login/test")
+    public Result<LoginResponse> testLogin(@Valid @RequestBody TestLoginRequest request) {
+        return Result.success(testLoginService.login(request.getAccount(), request.getPassword()));
     }
 
     /**
