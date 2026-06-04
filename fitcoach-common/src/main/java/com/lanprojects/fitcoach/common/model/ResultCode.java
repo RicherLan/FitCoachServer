@@ -102,6 +102,9 @@ public enum ResultCode {
     ADMIN_FEEDBACK_NOT_FOUND(7101, "反馈记录不存在", "admin.feedback_not_found"),
     ADMIN_FEEDBACK_STATUS_INVALID(7102, "反馈状态值不合法", "admin.feedback_status_invalid"),
     ADMIN_USER_TARGET_NOT_FOUND(7201, "目标用户不存在", "admin.user_target_not_found"),
+    ADMIN_TEST_ACCOUNT_DUPLICATE(7202, "测试账号已存在，请换一个 account", "admin.test_account_duplicate"),
+    ADMIN_TEST_ACCOUNT_ACCOUNT_INVALID(7203, "测试账号 account 仅支持英文/数字/下划线，长度 1-32", "admin.test_account_account_invalid"),
+    ADMIN_TEST_ACCOUNT_PASSWORD_INVALID(7204, "测试账号密码长度需在 6-64 之间", "admin.test_account_password_invalid"),
 
     // ====== 日志拉取 7301-7399（fitcoach-log 模块） ======
     LOG_TASK_NOT_FOUND(7301, "日志任务不存在", "log.task_not_found"),

@@ -70,6 +70,12 @@ public enum AdminAuditAction {
     LOGIN_FAILED,
     CHANGE_PASSWORD,
 
+    // ===== 内部测试账号（user.loginType=TEST） =====
+    CREATE_TEST_ACCOUNT,
+    UPDATE_TEST_ACCOUNT,
+    DELETE_TEST_ACCOUNT,
+    RESET_TEST_ACCOUNT_PASSWORD,
+
     // ===== 数据导出 =====
     EXPORT_USERS,
     EXPORT_ORDERS,
