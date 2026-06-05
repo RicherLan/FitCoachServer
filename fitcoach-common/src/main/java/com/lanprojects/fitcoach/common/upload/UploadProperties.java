@@ -43,6 +43,9 @@ public class UploadProperties {
     /** 意见反馈附件专用配置 */
     private Feedback feedback = new Feedback();
 
+    /** App 版本安装包 + Mapping 文件上传配置 */
+    private AppVersion appversion = new AppVersion();
+
     @Data
     public static class Avatar {
         /** 头像存放的相对子目录（拼到 baseDir 之后） */
@@ -87,5 +90,21 @@ public class UploadProperties {
         public List<String> getAllowedContentTypesView() {
             return Collections.unmodifiableList(allowedContentTypes);
         }
+    }
+
+    /**
+     * App 版本安装包和 Mapping 文件上传配置。
+     * <p>APK/IPA 文件通常 50-200MB，Mapping 文件通常几十 MB。
+     */
+    @Data
+    public static class AppVersion {
+        /** 安装包存放子目录 */
+        private String subDir = "appversion";
+
+        /** 安装包（APK/IPA）最大字节数 */
+        private long packageMaxSizeBytes = 200 * 1024 * 1024L;  // 200MB
+
+        /** Mapping 文件最大字节数 */
+        private long mappingMaxSizeBytes = 100 * 1024 * 1024L;  // 100MB
     }
 }

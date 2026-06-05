@@ -14,12 +14,13 @@ import java.io.InputStream;
  * 把 .apk / .exe 改 Header 为 image/jpeg 提交。仅依赖白名单校验 contentType 不安全 —
  * 需要读文件头几个字节比对真实格式。
  *
- * <p><b>支持的格式</b>（当前业务仅需图片）：
+ * <p><b>支持的格式</b>：
  * <ul>
  *   <li>JPEG: {@code FF D8 FF}</li>
  *   <li>PNG:  {@code 89 50 4E 47 0D 0A 1A 0A}</li>
  *   <li>WebP: {@code 52 49 46 46 ?? ?? ?? ?? 57 45 42 50}（RIFF????WEBP）</li>
  *   <li>GIF:  {@code 47 49 46 38 39 61} / {@code 47 49 46 38 37 61}</li>
+ *   <li>ZIP/APK/IPA: {@code 50 4B 03 04}（PK\x03\x04）</li>
  * </ul>
  *
  * <p><b>使用方式</b>：业务层先做 Content-Type 白名单 + size 校验，再调本工具二次校验真实格式：
@@ -62,6 +63,10 @@ public final class FileMagicValidator {
             case "image/png" -> isPng(header);
             case "image/webp" -> isWebp(header);
             case "image/gif" -> isGif(header);
+            case "application/zip",
+                 "application/vnd.android.package-archive",   // APK
+                 "application/x-ios-app",                     // IPA (显式声明时)
+                 "application/octet-stream" -> isZip(header); // APK/IPA 通用兜底
             default -> {
                 log.warn("[file-magic] 暂不支持的 contentType={}，跳过 magic 校验", type);
                 yield false;
@@ -74,6 +79,13 @@ public final class FileMagicValidator {
         byte[] header = readHeader(file);
         if (header == null) return false;
         return isJpeg(header) || isPng(header) || isWebp(header) || isGif(header);
+    }
+
+    /** 仅判定文件是否为 ZIP 格式（APK/IPA 都是 ZIP），便于安装包校验 */
+    public static boolean isZipFormat(MultipartFile file) {
+        byte[] header = readHeader(file);
+        if (header == null) return false;
+        return isZip(header);
     }
 
     // ====== 各格式头识别 ======
@@ -103,6 +115,15 @@ public final class FileMagicValidator {
         return h.length >= 6
                 && h[0] == 'G' && h[1] == 'I' && h[2] == 'F'
                 && h[3] == '8' && (h[4] == '7' || h[4] == '9') && h[5] == 'a';
+    }
+
+    /** ZIP magic: {@code PK\x03\x04} — APK 和 IPA 都是标准 ZIP 归档 */
+    private static boolean isZip(byte[] h) {
+        return h.length >= 4
+                && (h[0] & 0xFF) == 0x50  // 'P'
+                && (h[1] & 0xFF) == 0x4B  // 'K'
+                && (h[2] & 0xFF) == 0x03
+                && (h[3] & 0xFF) == 0x04;
     }
 
     private static byte[] readHeader(MultipartFile file) {

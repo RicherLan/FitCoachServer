@@ -164,6 +164,11 @@ public enum ResultCode {
     APP_VERSION_VERSION_CODE_INVALID(7704, "versionCode 必须为正整数", "appversion.version_code_invalid"),
     APP_VERSION_VERSION_NAME_INVALID(7705, "versionName 不能为空", "appversion.version_name_invalid"),
     APP_VERSION_DOWNLOAD_URL_INVALID(7706, "下载链接不能为空", "appversion.download_url_invalid"),
+    APP_VERSION_FILE_EMPTY(7711, "上传文件为空", "appversion.file_empty"),
+    APP_VERSION_FILE_TOO_LARGE(7712, "上传文件过大", "appversion.file_too_large"),
+    APP_VERSION_FILE_TYPE_INVALID(7713, "文件类型不合法", "appversion.file_type_invalid"),
+    APP_VERSION_FILE_STORAGE_ERROR(7714, "文件保存失败，请稍后重试", "appversion.file_storage_error"),
+    APP_VERSION_MAPPING_NOT_ANDROID(7715, "Mapping 文件仅支持 Android 平台", "appversion.mapping_not_android"),
 
     // ====== 系统配置 7801-7899（fitcoach-admin · SysConfig） ======
     SYS_CONFIG_NOT_FOUND(7801, "配置项不存在", "admin.config_not_found"),

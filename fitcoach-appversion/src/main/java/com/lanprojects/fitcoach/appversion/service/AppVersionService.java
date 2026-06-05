@@ -2,6 +2,7 @@ package com.lanprojects.fitcoach.appversion.service;
 
 import com.lanprojects.fitcoach.appversion.entity.AppVersionEntity;
 import com.lanprojects.fitcoach.appversion.repository.AppVersionRepository;
+import com.lanprojects.fitcoach.appversion.service.AppVersionFileStorageService.FileStoreResult;
 import com.lanprojects.fitcoach.common.exception.BusinessException;
 import com.lanprojects.fitcoach.common.model.ResultCode;
 import lombok.RequiredArgsConstructor;
@@ -34,6 +35,7 @@ public class AppVersionService {
     public static final Set<String> ALLOWED_PLATFORMS = Set.of("android", "ios");
 
     private final AppVersionRepository appVersionRepository;
+    private final AppVersionFileStorageService fileStorageService;
 
     // ====== 查询 ======
 
@@ -130,15 +132,107 @@ public class AppVersionService {
     }
 
     /**
-     * 硬删除一条版本记录。
+     * 硬删除一条版本记录 + 清理关联的磁盘文件（安装包 / mapping）。
      * <p>不做"是否被任何客户端使用"的保护：版本号即将退役 / 误录草稿想清理 都是合理删除场景。
      * 删除最新已发布版本会让 App 端查不到更新（fallback 为「无新版本」），不会破坏现有 App。
      */
     public void delete(Long id) {
         AppVersionEntity existing = findById(id);
+        // 先清理磁盘文件
+        fileStorageService.deleteFileByUrl(existing.getPackageUrl());
+        fileStorageService.deleteFileByUrl(existing.getMappingUrl());
         appVersionRepository.delete(existing);
-        log.info("[appversion] 删除版本 id={} platform={} versionCode={}",
+        log.info("[appversion] 删除版本 id={} platform={} versionCode={} (已清理关联文件)",
                 id, existing.getPlatform(), existing.getVersionCode());
+    }
+
+    // ====== 文件关联 ======
+
+    /**
+     * 上传并关联安装包文件到版本。
+     * <p>如果该版本已有安装包，先删除旧文件再上传新文件（覆盖语义）。
+     *
+     * @param id   版本 ID
+     * @param file 上传的安装包文件
+     * @return 更新后的版本实体
+     */
+    public AppVersionEntity attachPackageFile(Long id, org.springframework.web.multipart.MultipartFile file) {
+        AppVersionEntity v = findById(id);
+        // 删除旧文件（如果有）
+        if (v.getPackageUrl() != null) {
+            fileStorageService.deleteFileByUrl(v.getPackageUrl());
+        }
+        FileStoreResult result = fileStorageService.savePackageFile(v.getPlatform(), v.getVersionCode(), file);
+        v.setPackageUrl(result.url());
+        v.setPackageSize(result.size());
+        v.setPackageMd5(result.md5());
+        v.setPackageFileName(result.fileName());
+        AppVersionEntity saved = appVersionRepository.save(v);
+        log.info("[appversion] 安装包已上传 id={} platform={} versionCode={} size={}B md5={}",
+                id, v.getPlatform(), v.getVersionCode(), result.size(), result.md5());
+        return saved;
+    }
+
+    /**
+     * 上传并关联 Mapping 文件到版本（仅 Android）。
+     * <p>如果该版本已有 mapping，先删除旧文件再上传新文件（覆盖语义）。
+     *
+     * @param id   版本 ID
+     * @param file 上传的 mapping 文件
+     * @return 更新后的版本实体
+     */
+    public AppVersionEntity attachMappingFile(Long id, org.springframework.web.multipart.MultipartFile file) {
+        AppVersionEntity v = findById(id);
+        if (!"android".equals(v.getPlatform())) {
+            throw new BusinessException(ResultCode.APP_VERSION_MAPPING_NOT_ANDROID);
+        }
+        // 删除旧文件（如果有）
+        if (v.getMappingUrl() != null) {
+            fileStorageService.deleteFileByUrl(v.getMappingUrl());
+        }
+        FileStoreResult result = fileStorageService.saveMappingFile(v.getPlatform(), v.getVersionCode(), file);
+        v.setMappingUrl(result.url());
+        v.setMappingSize(result.size());
+        v.setMappingMd5(result.md5());
+        v.setMappingFileName(result.fileName());
+        AppVersionEntity saved = appVersionRepository.save(v);
+        log.info("[appversion] Mapping 已上传 id={} platform={} versionCode={} size={}B md5={}",
+                id, v.getPlatform(), v.getVersionCode(), result.size(), result.md5());
+        return saved;
+    }
+
+    /**
+     * 删除版本关联的安装包文件（仅删文件 + 清空字段，不删版本记录）。
+     */
+    public AppVersionEntity removePackageFile(Long id) {
+        AppVersionEntity v = findById(id);
+        if (v.getPackageUrl() != null) {
+            fileStorageService.deleteFileByUrl(v.getPackageUrl());
+            v.setPackageUrl(null);
+            v.setPackageSize(null);
+            v.setPackageMd5(null);
+            v.setPackageFileName(null);
+            v = appVersionRepository.save(v);
+            log.info("[appversion] 安装包已删除 id={} platform={} versionCode={}", id, v.getPlatform(), v.getVersionCode());
+        }
+        return v;
+    }
+
+    /**
+     * 删除版本关联的 Mapping 文件。
+     */
+    public AppVersionEntity removeMappingFile(Long id) {
+        AppVersionEntity v = findById(id);
+        if (v.getMappingUrl() != null) {
+            fileStorageService.deleteFileByUrl(v.getMappingUrl());
+            v.setMappingUrl(null);
+            v.setMappingSize(null);
+            v.setMappingMd5(null);
+            v.setMappingFileName(null);
+            v = appVersionRepository.save(v);
+            log.info("[appversion] Mapping 已删除 id={} platform={} versionCode={}", id, v.getPlatform(), v.getVersionCode());
+        }
+        return v;
     }
 
     // ====== 校验 ======

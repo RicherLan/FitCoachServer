@@ -96,6 +96,48 @@ public class AppVersionEntity extends BaseEntity {
     @Column(name = "download_url", nullable = false, length = 512)
     private String downloadUrl;
 
+    // ====== 安装包文件 ======
+
+    /**
+     * 安装包下载 URL（上传后自动生成，如 {@code /static/appversion/android/1002003/202506/package_xxx.apk}）。
+     * <p>null 表示尚未上传安装包；该 URL 可直接用作官网下载链接。
+     */
+    @Column(name = "package_url", length = 512)
+    private String packageUrl;
+
+    /** 安装包文件大小（字节），上传时自动记录 */
+    @Column(name = "package_size")
+    private Long packageSize;
+
+    /** 安装包 MD5（32 字符小写 hex），上传时自动计算，用于下载完整性校验 */
+    @Column(name = "package_md5", length = 32)
+    private String packageMd5;
+
+    /** 安装包原始文件名（上传时的文件名，用于 admin 展示） */
+    @Column(name = "package_file_name", length = 255)
+    private String packageFileName;
+
+    // ====== Mapping 文件（仅 Android） ======
+
+    /**
+     * ProGuard/R8 Mapping 文件下载 URL。
+     * <p>仅 Android 平台需要，用于线上崩溃日志的反混淆。iOS 没有混淆机制故不需要。
+     */
+    @Column(name = "mapping_url", length = 512)
+    private String mappingUrl;
+
+    /** Mapping 文件大小（字节） */
+    @Column(name = "mapping_size")
+    private Long mappingSize;
+
+    /** Mapping 文件 MD5 */
+    @Column(name = "mapping_md5", length = 32)
+    private String mappingMd5;
+
+    /** Mapping 原始文件名 */
+    @Column(name = "mapping_file_name", length = 255)
+    private String mappingFileName;
+
     /**
      * 是否强制升级。
      * <ul>

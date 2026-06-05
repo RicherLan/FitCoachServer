@@ -23,6 +23,7 @@ import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.multipart.MultipartFile;
 
 import java.util.List;
 
@@ -37,6 +38,10 @@ import java.util.List;
  *   <li>{@code PATCH /{id}} —— 更新（PATCH 语义；platform / versionCode 不可改）</li>
  *   <li>{@code POST /{id}/toggle-published?value=true|false} —— 一键发布/下线</li>
  *   <li>{@code DELETE /{id}} —— 硬删除</li>
+ *   <li>{@code POST /{id}/upload-package} —— 上传安装包（APK/IPA）</li>
+ *   <li>{@code POST /{id}/upload-mapping} —— 上传 Mapping 文件（仅 Android）</li>
+ *   <li>{@code DELETE /{id}/package} —— 删除安装包</li>
+ *   <li>{@code DELETE /{id}/mapping} —— 删除 Mapping 文件</li>
  * </ul>
  *
  * <p><b>鉴权</b>：本路径走 {@link AdminAuthInterceptor}，只有登录的 admin 才能访问；
@@ -124,14 +129,86 @@ public class AdminAppVersionController {
         return Result.success(AdminAppVersionDto.from(updated));
     }
 
-    /** 硬删除 */
+    /** 硬删除（含关联文件清理） */
     @DeleteMapping("/{id}")
     public Result<Void> delete(HttpServletRequest request, @PathVariable("id") Long id) {
         String operator = (String) request.getAttribute(AdminAuthInterceptor.ATTR_ADMIN_USERNAME);
         appVersionService.delete(id);
         log.info("[admin] {} 删除版本 id={}", operator, id);
         auditLogService.logSuccess(request, AdminAuditAction.DELETE_APP_VERSION,
-                "APP_VERSION", String.valueOf(id), "hard delete");
+                "APP_VERSION", String.valueOf(id), "hard delete (files cleaned)");
         return Result.success(null);
+    }
+
+    // ====== 文件上传 ======
+
+    /**
+     * 上传安装包文件（APK / IPA）。
+     * <p>覆盖语义：如果该版本已有安装包，旧文件会被删除并替换为新文件。
+     */
+    @PostMapping("/{id}/upload-package")
+    public Result<AdminAppVersionDto> uploadPackage(
+            HttpServletRequest request,
+            @PathVariable("id") Long id,
+            @RequestParam("file") MultipartFile file) {
+        String operator = (String) request.getAttribute(AdminAuthInterceptor.ATTR_ADMIN_USERNAME);
+        AppVersionEntity updated = appVersionService.attachPackageFile(id, file);
+        log.info("[admin] {} 上传安装包 id={} platform={} versionCode={} size={}B",
+                operator, id, updated.getPlatform(), updated.getVersionCode(), updated.getPackageSize());
+        auditLogService.logSuccess(request, AdminAuditAction.UPLOAD_APP_VERSION_PACKAGE,
+                "APP_VERSION", String.valueOf(id),
+                String.format("platform=%s, versionCode=%s, fileName=%s, size=%dB, md5=%s",
+                        updated.getPlatform(), updated.getVersionCode(),
+                        updated.getPackageFileName(), updated.getPackageSize(), updated.getPackageMd5()));
+        return Result.success(AdminAppVersionDto.from(updated));
+    }
+
+    /**
+     * 上传 Mapping 文件（仅 Android 平台）。
+     * <p>覆盖语义：如果该版本已有 mapping，旧文件会被删除并替换为新文件。
+     */
+    @PostMapping("/{id}/upload-mapping")
+    public Result<AdminAppVersionDto> uploadMapping(
+            HttpServletRequest request,
+            @PathVariable("id") Long id,
+            @RequestParam("file") MultipartFile file) {
+        String operator = (String) request.getAttribute(AdminAuthInterceptor.ATTR_ADMIN_USERNAME);
+        AppVersionEntity updated = appVersionService.attachMappingFile(id, file);
+        log.info("[admin] {} 上传 Mapping id={} platform={} versionCode={} size={}B",
+                operator, id, updated.getPlatform(), updated.getVersionCode(), updated.getMappingSize());
+        auditLogService.logSuccess(request, AdminAuditAction.UPLOAD_APP_VERSION_MAPPING,
+                "APP_VERSION", String.valueOf(id),
+                String.format("platform=%s, versionCode=%s, fileName=%s, size=%dB, md5=%s",
+                        updated.getPlatform(), updated.getVersionCode(),
+                        updated.getMappingFileName(), updated.getMappingSize(), updated.getMappingMd5()));
+        return Result.success(AdminAppVersionDto.from(updated));
+    }
+
+    /** 删除安装包文件（仅删文件 + 清空字段，不删版本记录） */
+    @DeleteMapping("/{id}/package")
+    public Result<AdminAppVersionDto> deletePackage(
+            HttpServletRequest request,
+            @PathVariable("id") Long id) {
+        String operator = (String) request.getAttribute(AdminAuthInterceptor.ATTR_ADMIN_USERNAME);
+        AppVersionEntity updated = appVersionService.removePackageFile(id);
+        log.info("[admin] {} 删除安装包 id={}", operator, id);
+        auditLogService.logSuccess(request, AdminAuditAction.DELETE_APP_VERSION_FILE,
+                "APP_VERSION", String.valueOf(id),
+                String.format("delete package, platform=%s, versionCode=%s", updated.getPlatform(), updated.getVersionCode()));
+        return Result.success(AdminAppVersionDto.from(updated));
+    }
+
+    /** 删除 Mapping 文件 */
+    @DeleteMapping("/{id}/mapping")
+    public Result<AdminAppVersionDto> deleteMapping(
+            HttpServletRequest request,
+            @PathVariable("id") Long id) {
+        String operator = (String) request.getAttribute(AdminAuthInterceptor.ATTR_ADMIN_USERNAME);
+        AppVersionEntity updated = appVersionService.removeMappingFile(id);
+        log.info("[admin] {} 删除 Mapping id={}", operator, id);
+        auditLogService.logSuccess(request, AdminAuditAction.DELETE_APP_VERSION_FILE,
+                "APP_VERSION", String.valueOf(id),
+                String.format("delete mapping, platform=%s, versionCode=%s", updated.getPlatform(), updated.getVersionCode()));
+        return Result.success(AdminAppVersionDto.from(updated));
     }
 }

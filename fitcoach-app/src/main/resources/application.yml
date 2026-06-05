@@ -1,5 +1,7 @@
 server:
   port: 8080
+  tomcat:
+    connection-timeout: 300000      # 5 分钟（毫秒），支持大文件上传
 
 spring:
   application:
@@ -34,12 +36,13 @@ spring:
   # Multipart 上传
   # - 反馈附件 / 头像走小图：客户端压到 ~1MB；
   # - 日志 zip：单包最大 50MB（log-pull.max-upload-size-bytes 兜底校验）。
-  # 这里取所有上传场景的最大值 60MB，给 multipart 边界字段留点 buffer。
+  # - 安装包 APK/IPA：最大 200MB（appversion.package-max-size-bytes 兜底校验）。
+  # 这里取所有上传场景的最大值 200MB + buffer。
   servlet:
     multipart:
       enabled: true
-      max-file-size: 60MB
-      max-request-size: 60MB
+      max-file-size: 210MB
+      max-request-size: 210MB
 
 # ====== 文件上传 ======
 # 头像等用户上传文件存盘根目录；可通过环境变量覆盖到挂载盘 / OSS 同步目录。
@@ -62,6 +65,10 @@ upload:
     sub-dir: feedback
     max-size-bytes: 1048576                           # 1MB / 张（客户端压缩到 1280x1280 q=0.7）
     max-attachment-count: 5                           # 单条反馈最多 5 张
+  appversion:
+    sub-dir: appversion
+    package-max-size-bytes: 209715200                 # 200MB（APK/IPA 通常 50-200MB）
+    mapping-max-size-bytes: 104857600                 # 100MB（ProGuard/R8 mapping 文件）
     max-content-length: 1000                          # 正文最长 1000 字
     allowed-content-types: image/jpeg,image/png,image/webp
 
