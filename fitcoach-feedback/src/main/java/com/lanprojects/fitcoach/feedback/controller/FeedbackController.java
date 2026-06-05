@@ -3,14 +3,13 @@ package com.lanprojects.fitcoach.feedback.controller;
 import com.lanprojects.fitcoach.common.exception.BusinessException;
 import com.lanprojects.fitcoach.common.model.Result;
 import com.lanprojects.fitcoach.common.model.ResultCode;
-import com.lanprojects.fitcoach.feedback.dto.CreateFeedbackRequest;
-import com.lanprojects.fitcoach.feedback.dto.FeedbackResponse;
-import com.lanprojects.fitcoach.feedback.dto.UploadAttachmentResponse;
+import com.lanprojects.fitcoach.feedback.dto.*;
 import com.lanprojects.fitcoach.feedback.service.FeedbackService;
 import com.lanprojects.fitcoach.login.service.AuthService;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.data.domain.Page;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
 
@@ -59,6 +58,32 @@ public class FeedbackController {
             @RequestBody(required = false) CreateFeedbackRequest request) {
         String uid = currentUid(authorization);
         return Result.success(feedbackService.createFeedback(uid, request));
+    }
+
+    /**
+     * 查询当前用户的反馈列表（分页，按创建时间倒序）。
+     * <p>GET /api/feedback?page=0&size=10
+     */
+    @GetMapping
+    public Result<Page<MyFeedbackSummaryDto>> listMyFeedbacks(
+            @RequestHeader(value = "Authorization", required = false) String authorization,
+            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "10") int size) {
+        String uid = currentUid(authorization);
+        return Result.success(feedbackService.listMyFeedbacks(uid, page, size));
+    }
+
+    /**
+     * 查询当前用户某条反馈的详情。
+     * <p>GET /api/feedback/{id}
+     * <br>仅允许查看自己的反馈，否则返回 6105。
+     */
+    @GetMapping("/{id}")
+    public Result<MyFeedbackDetailDto> getMyFeedbackDetail(
+            @RequestHeader(value = "Authorization", required = false) String authorization,
+            @PathVariable Long id) {
+        String uid = currentUid(authorization);
+        return Result.success(feedbackService.getMyFeedbackDetail(uid, id));
     }
 
     // ====== 鉴权辅助（与 UserController 风格一致；后续可抽到 common，本期重复 2 处可接受） ======

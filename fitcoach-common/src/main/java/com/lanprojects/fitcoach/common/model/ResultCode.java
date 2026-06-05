@@ -82,6 +82,7 @@ public enum ResultCode {
     FEEDBACK_ATTACHMENT_FILE_TOO_LARGE(6102, "附件文件过大，请重新选择", "feedback.attachment_file_too_large"),
     FEEDBACK_ATTACHMENT_CONTENT_TYPE_INVALID(6103, "附件仅支持 jpg / png / webp 格式", "feedback.attachment_content_type_invalid"),
     FEEDBACK_ATTACHMENT_STORAGE_ERROR(6104, "附件保存失败，请稍后重试", "feedback.attachment_storage_error"),
+    FEEDBACK_NOT_FOUND(6105, "反馈记录不存在", "feedback.not_found"),
 
     // ====== 后台管理 7xxx（fitcoach-admin 模块） ======
     // admin 后台不做 i18n（内部维护人员均为中文），i18nKey 仍登记一份保持代码一致性，

@@ -3,14 +3,14 @@ package com.lanprojects.fitcoach.feedback.service;
 import com.lanprojects.fitcoach.common.exception.BusinessException;
 import com.lanprojects.fitcoach.common.model.ResultCode;
 import com.lanprojects.fitcoach.common.upload.UploadProperties;
-import com.lanprojects.fitcoach.feedback.dto.CreateFeedbackRequest;
-import com.lanprojects.fitcoach.feedback.dto.FeedbackResponse;
-import com.lanprojects.fitcoach.feedback.dto.UploadAttachmentResponse;
+import com.lanprojects.fitcoach.feedback.dto.*;
 import com.lanprojects.fitcoach.feedback.entity.FeedbackStatus;
 import com.lanprojects.fitcoach.feedback.entity.UserFeedback;
 import com.lanprojects.fitcoach.feedback.repository.UserFeedbackRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageRequest;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.multipart.MultipartFile;
@@ -127,6 +127,39 @@ public class FeedbackService {
         log.info("反馈创建成功, uid={}, id={}, type={}, attachments={}",
                 uid, saved.getId(), saved.getType(), attachmentUrls.size());
         return FeedbackResponse.from(saved);
+    }
+
+    // ======================== 用户侧查询 ========================
+
+    /**
+     * 查询当前用户的反馈列表（分页，按创建时间倒序）。
+     *
+     * @param uid  当前用户 uid
+     * @param page 页码（0-based）
+     * @param size 每页条数（上限 50，兜底 10）
+     */
+    @Transactional(readOnly = true)
+    public Page<MyFeedbackSummaryDto> listMyFeedbacks(String uid, int page, int size) {
+        size = Math.max(1, Math.min(size, 50));
+        Page<UserFeedback> entities = feedbackRepository
+                .findByUidOrderByCreatedAtDesc(uid, PageRequest.of(page, size));
+        return entities.map(MyFeedbackSummaryDto::from);
+    }
+
+    /**
+     * 查询用户自己的某条反馈详情。
+     * <p>
+     * 仅允许查看自己的反馈；id 不存在或非本人的反馈返回 6105。
+     */
+    @Transactional(readOnly = true)
+    public MyFeedbackDetailDto getMyFeedbackDetail(String uid, Long id) {
+        UserFeedback entity = feedbackRepository.findById(id)
+                .orElseThrow(() -> new BusinessException(ResultCode.FEEDBACK_NOT_FOUND));
+        if (!entity.getUid().equals(uid)) {
+            // 非本人反馈，等同于不存在
+            throw new BusinessException(ResultCode.FEEDBACK_NOT_FOUND);
+        }
+        return MyFeedbackDetailDto.from(entity);
     }
 
     private String trimTrailingSlash(String s) {

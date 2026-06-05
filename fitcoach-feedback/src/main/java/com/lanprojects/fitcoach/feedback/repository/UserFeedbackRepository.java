@@ -31,4 +31,7 @@ public interface UserFeedbackRepository
 
     /** 按用户 uid 计数（admin 用户详情显示该用户的反馈数） */
     long countByUid(String uid);
+
+    /** 按用户 uid 分页查询（客户端"我的反馈"列表） */
+    Page<UserFeedback> findByUidOrderByCreatedAtDesc(String uid, Pageable pageable);
 }
