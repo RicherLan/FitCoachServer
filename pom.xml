@@ -30,6 +30,7 @@
         <module>fitcoach-payment</module>
         <module>fitcoach-appversion</module>
         <module>fitcoach-admin</module>
+        <module>fitcoach-track</module>
         <module>fitcoach-app</module>
     </modules>
 
@@ -100,6 +101,11 @@
             <dependency>
                 <groupId>com.lanprojects</groupId>
                 <artifactId>fitcoach-admin</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>com.lanprojects</groupId>
+                <artifactId>fitcoach-track</artifactId>
                 <version>${project.version}</version>
             </dependency>
 

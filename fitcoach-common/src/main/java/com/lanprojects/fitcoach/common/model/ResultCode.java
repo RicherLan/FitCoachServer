@@ -216,7 +216,19 @@ public enum ResultCode {
     TRAINING_RECORD_WEIGHT_INVALID(8306, "重量必须 ≥ 0", "training_record.weight_invalid"),
     TRAINING_RECORD_REPS_INVALID(8307, "次数必须 ≥ 1", "training_record.reps_invalid"),
     TRAINING_RECORD_CLIENT_ID_REQUIRED(8308, "缺少幂等标识 clientId", "training_record.client_id_required"),
-    TRAINING_RECORD_EXERCISE_NOT_FOUND(8309, "训练记录中引用的动作不存在", "training_record.exercise_not_found");
+    TRAINING_RECORD_EXERCISE_NOT_FOUND(8309, "训练记录中引用的动作不存在", "training_record.exercise_not_found"),
+
+    // ====== 产品埋点 8401-8499（fitcoach-track） ======
+    // 客户端 SDK 上报失败后会按指数退避重试；以下错误码均设计为「拒绝即不再重试」语义，
+    // 客户端收到非 SUCCESS 时应丢弃当前批次而不是死循环重试。
+    /** 客户端发了空 batch；说明 SDK 调度器逻辑 bug，正常不应该到 server */
+    TRACK_BATCH_EMPTY(8401, "埋点批次为空", "track.batch_empty"),
+    /** 单批超过 {@code TrackService.MAX_BATCH_SIZE}；客户端应拆批后重试 */
+    TRACK_BATCH_TOO_LARGE(8402, "单批埋点数量超过上限", "track.batch_too_large"),
+    /** eventKey 命名违反约定（空、>64 字符）；属于客户端 bug，server 端会跳过单条但保留此码备用 */
+    TRACK_EVENT_KEY_INVALID(8403, "埋点 eventKey 不合法", "track.event_key_invalid"),
+    /** deviceId 维度 200 批次/分钟限流；客户端收到此码后应延后到下个窗口（建议退避 60s+） */
+    TRACK_RATE_LIMITED(8404, "埋点上报频率过高，请稍后重试", "track.rate_limited");
 
     private final int code;
     /** zh-CN 内置文案，作为 i18n properties 全部漏配时的最终兜底；不建议直接下发，请走 I18nMessages 翻译 */

@@ -1,0 +1,36 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd">
+    <modelVersion>4.0.0</modelVersion>
+
+    <parent>
+        <groupId>com.lanprojects</groupId>
+        <artifactId>fitcoach-server</artifactId>
+        <version>1.0.0-SNAPSHOT</version>
+    </parent>
+
+    <artifactId>fitcoach-track</artifactId>
+    <name>FitCoach Track</name>
+    <description>产品埋点（APM Phase 1）：客户端事件批量上报 / 限流 / 落库；后续可扩展到性能 / 错误埋点</description>
+
+    <dependencies>
+        <!-- 通用：BaseEntity / Result / ResultCode / ClientContext / Caffeine -->
+        <dependency>
+            <groupId>com.lanprojects</groupId>
+            <artifactId>fitcoach-common</artifactId>
+        </dependency>
+
+        <!-- 鉴权复用：try-best 拿当前 uid（无登录态也允许上报） -->
+        <dependency>
+            <groupId>com.lanprojects</groupId>
+            <artifactId>fitcoach-login</artifactId>
+        </dependency>
+
+        <!-- 本地限流：每 deviceId 速率窗口 -->
+        <dependency>
+            <groupId>com.github.ben-manes.caffeine</groupId>
+            <artifactId>caffeine</artifactId>
+        </dependency>
+    </dependencies>
+</project>

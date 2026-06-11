@@ -60,6 +60,10 @@
             <groupId>com.lanprojects</groupId>
             <artifactId>fitcoach-admin</artifactId>
         </dependency>
+        <dependency>
+            <groupId>com.lanprojects</groupId>
+            <artifactId>fitcoach-track</artifactId>
+        </dependency>
 
         <!-- MySQL -->
         <dependency>
