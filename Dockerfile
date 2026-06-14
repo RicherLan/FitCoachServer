@@ -25,6 +25,11 @@
 #       fitcoach-server:latest
 #
 # 一般通过 docker-compose.prod.yml 编排，不直接 docker run。
+#
+# ⚠️ 新增 Maven module 时必改两处（白名单式 COPY）：
+#   1. 依赖层  COPY <new-module>/pom.xml  <new-module>/
+#   2. 源码层  COPY <new-module>          <new-module>
+#   否则 maven 会报 "Child module /build/<new-module> of /build/pom.xml does not exist"
 # ============================================================
 
 # ====== Stage 1: 构建 ======
