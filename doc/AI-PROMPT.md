@@ -5,17 +5,18 @@
 
 ---
 
-## 0. 三仓全景（务必先认清楚）
+## 0. 四仓全景（务必先认清楚）
 
-本工程不是孤岛，是 **3 个仓库协同开发**，本机路径都在 `~/code/lanprojects/`：
+本工程不是孤岛，是 **4 个仓库协同开发**，本机路径都在 `~/code/lanprojects/`：
 
 | 仓 | 路径 | 角色 |
 |---|---|---|
 | **FitCoachServer**（本仓） | `~/code/lanprojects/FitCoachServer` | Spring Boot 后端（10+ Maven 模块，Docker 单机部署） |
 | FitCoachRN | `~/code/lanprojects/FitCoachRN` | RN 客户端（Android 已实装） |
 | FitCoachAdminManager | `~/code/lanprojects/FitCoachAdminManager` | 管理后台（React + Vite + AntD） |
+| fitcoach-website | `~/code/lanprojects/fitcoach-website` | 官网静态站（HTML/CSS，GitHub Pages 部署，绑定 `migofitai.com`）+ 品牌 VI 单一来源 [`BRAND.md`](../../fitcoach-website/BRAND.md) |
 
-跨仓改动**必须三仓同步提**（举例：加一个 API → server 加 controller + RN 加 api 调用 + admin 加管理页 → 三仓各 commit + push）。
+跨仓改动**必须多仓同步提**（举例：加一个 API → server 加 controller + RN 加 api 调用 + admin 加管理页 → 三仓各 commit + push；改公司信息 / 品牌 → 四仓同步）。
 
 ---
 
@@ -159,6 +160,7 @@ docker exec -it fitcoach-mysql-prod mysql -uroot -p'<pwd>' fitcoach -e "ALTER TA
 | 加一个新的 DB 字段 | server 改 entity + DTO + mvn → admin 改 type + 页面 → RN 改 model + 渲染 → **同时给 ALTER TABLE SQL** |
 | 加一个新的 Maven module | server 改根 `pom.xml` + **同步改 Dockerfile 两处 COPY** |
 | 改返回结构 | 三仓同步：server DTO → admin types → RN model → 各仓 tsc/mvn 验证 → 三仓 commit + push |
+| 改公司信息 / API 域名 / 备案号 | server `application-prod.yml` + RN `httpClient` + admin `vite.config.ts` proxy + website 全站 + [`BRAND.md`](../../fitcoach-website/BRAND.md) → **四仓同步** |
 
 ---
 
