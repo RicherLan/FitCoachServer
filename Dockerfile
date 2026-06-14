@@ -67,6 +67,8 @@ COPY fitcoach-log/pom.xml            fitcoach-log/
 COPY fitcoach-clientbus/pom.xml      fitcoach-clientbus/
 COPY fitcoach-exercise/pom.xml       fitcoach-exercise/
 COPY fitcoach-training-record/pom.xml fitcoach-training-record/
+COPY fitcoach-notification/pom.xml   fitcoach-notification/
+COPY fitcoach-track/pom.xml          fitcoach-track/
 COPY fitcoach-membership/pom.xml     fitcoach-membership/
 COPY fitcoach-payment/pom.xml        fitcoach-payment/
 COPY fitcoach-appversion/pom.xml     fitcoach-appversion/
@@ -84,6 +86,8 @@ COPY fitcoach-log            fitcoach-log
 COPY fitcoach-clientbus      fitcoach-clientbus
 COPY fitcoach-exercise       fitcoach-exercise
 COPY fitcoach-training-record fitcoach-training-record
+COPY fitcoach-notification   fitcoach-notification
+COPY fitcoach-track          fitcoach-track
 COPY fitcoach-membership     fitcoach-membership
 COPY fitcoach-payment        fitcoach-payment
 COPY fitcoach-appversion     fitcoach-appversion
