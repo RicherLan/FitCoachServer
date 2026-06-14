@@ -160,6 +160,7 @@ public class TrainingRecordService {
             ex.setMuscleGroup(meta.getMuscleGroup());    // 快照
             ex.setEquipment(meta.getEquipment());        // 快照
             ex.setEmoji(meta.getEmoji());                 // 快照
+            ex.setIconUrl(meta.getIconUrl());             // 快照 (v2 自定义图标)
 
             // 写入 sets，setIndex 从 1 起重排
             for (int s = 0; s < item.getSets().size(); s++) {

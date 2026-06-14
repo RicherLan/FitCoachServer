@@ -1,5 +1,6 @@
 package com.lanprojects.fitcoach.exercise.dto;
 
+import com.lanprojects.fitcoach.common.i18n.I18nText;
 import com.lanprojects.fitcoach.exercise.entity.MuscleGroupEntity;
 import lombok.Builder;
 import lombok.Data;
@@ -34,10 +35,15 @@ public class MuscleGroupDTO {
     /** 配色（hex，客户端类目卡片背景/标签色），例："#FF5722"；为空时客户端用默认色 */
     private String color;
 
+    /**
+     * 按当前请求语言（{@link com.lanprojects.fitcoach.common.client.ClientContext#locale()}）解析
+     * {@link MuscleGroupEntity#getDisplayNameI18n() displayName 的多语言字段}；
+     * 缺失/未命中时回落到旧单语言字段。
+     */
     public static MuscleGroupDTO from(MuscleGroupEntity g) {
         return MuscleGroupDTO.builder()
                 .groupKey(g.getGroupKey())
-                .displayName(g.getDisplayName())
+                .displayName(I18nText.pick(g.getDisplayNameI18n(), g.getDisplayName()))
                 .emoji(g.getEmoji())
                 .description(g.getDescription())
                 .color(g.getColor())

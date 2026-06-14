@@ -54,6 +54,10 @@ public enum AdminAuditAction {
     CREATE_TRAINING_EXERCISE,
     UPDATE_TRAINING_EXERCISE,
     DELETE_TRAINING_EXERCISE,
+    /** admin 给训练动作上传 / 替换自定义图标（{@code training_exercise.icon_url}） */
+    UPLOAD_TRAINING_EXERCISE_ICON,
+    /** admin 删除训练动作的自定义图标，回退到 emoji 渲染 */
+    DELETE_TRAINING_EXERCISE_ICON,
 
     // ===== App 版本 =====
     CREATE_APP_VERSION,
@@ -62,6 +66,11 @@ public enum AdminAuditAction {
     UPLOAD_APP_VERSION_PACKAGE,
     UPLOAD_APP_VERSION_MAPPING,
     DELETE_APP_VERSION_FILE,
+
+    // ===== 系统通知（站内弹窗） =====
+    CREATE_SYS_NOTIFICATION,
+    UPDATE_SYS_NOTIFICATION,
+    DELETE_SYS_NOTIFICATION,
 
     // ===== 反馈 =====
     UPDATE_FEEDBACK_STATUS,

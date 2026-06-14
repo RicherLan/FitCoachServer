@@ -1,0 +1,36 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd">
+    <modelVersion>4.0.0</modelVersion>
+
+    <parent>
+        <groupId>com.lanprojects</groupId>
+        <artifactId>fitcoach-server</artifactId>
+        <version>1.0.0-SNAPSHOT</version>
+    </parent>
+
+    <artifactId>fitcoach-notification</artifactId>
+    <name>FitCoach System Notification</name>
+    <description>
+        系统通知（站内弹窗）域：admin 后台维护一条「需要弹给用户的通知」，
+        通过 client poll 通道下发给客户端，客户端用全局 AppDialog 弹窗。
+
+        范围：
+        - 单条通知含 标题 / 内容 / 主副按钮文案 / 主副按钮 URL（deeplink）
+        - 投放对象：所有人 或 指定 uid 列表
+        - 有效期：admin 选择「最多存在 N 天」→ 落库 expire_at = now + N*86400000
+        - 客户端轮询每次只取最新的一条（按 created_at DESC），客户端用本地 seenIds 去重，
+          server 不感知"用户是否已看过"。
+        - 通过实现 ClientPollContribution，自动接入 /api/client/poll 通道。
+        - Admin CRUD 接口在 fitcoach-admin 模块，复用本模块的 service/entity。
+    </description>
+
+    <dependencies>
+        <!-- BaseEntity / Result / BusinessException / ResultCode / ClientPollContribution SPI -->
+        <dependency>
+            <groupId>com.lanprojects</groupId>
+            <artifactId>fitcoach-common</artifactId>
+        </dependency>
+    </dependencies>
+</project>

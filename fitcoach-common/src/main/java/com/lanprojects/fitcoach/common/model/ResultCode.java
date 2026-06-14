@@ -173,6 +173,19 @@ public enum ResultCode {
     // ====== 系统配置 7801-7899（fitcoach-admin · SysConfig） ======
     SYS_CONFIG_NOT_FOUND(7801, "配置项不存在", "admin.config_not_found"),
 
+    // ====== 系统通知 7901-7999（fitcoach-notification） ======
+    SYS_NOTIFICATION_NOT_FOUND(7901, "系统通知不存在", "sys_notification.not_found"),
+    SYS_NOTIFICATION_TITLE_INVALID(7902, "通知标题不能为空", "sys_notification.title_invalid"),
+    SYS_NOTIFICATION_MESSAGE_INVALID(7903, "通知内容不能为空", "sys_notification.message_invalid"),
+    SYS_NOTIFICATION_PRIMARY_BUTTON_INVALID(7904, "主按钮文案不能为空", "sys_notification.primary_button_invalid"),
+    SYS_NOTIFICATION_EXPIRE_DAYS_INVALID(7905, "过期天数必须在 1-365 之间", "sys_notification.expire_days_invalid"),
+    SYS_NOTIFICATION_TARGET_UIDS_EMPTY(7906, "指定投放用户时 uid 列表不能为空", "sys_notification.target_uids_empty"),
+    SYS_NOTIFICATION_TARGET_UIDS_TOO_MANY(7907, "投放用户数量超过上限", "sys_notification.target_uids_too_many"),
+    SYS_NOTIFICATION_TARGET_AUDIENCE_INVALID(7908, "投放对象类型不合法", "sys_notification.target_audience_invalid"),
+    SYS_NOTIFICATION_STATUS_INVALID(7909, "通知状态值不合法", "sys_notification.status_invalid"),
+    SYS_NOTIFICATION_PLATFORMS_INVALID(7910, "投放平台值非法（仅支持 android / ios）", "sys_notification.platforms_invalid"),
+    SYS_NOTIFICATION_VERSION_RANGE_INVALID(7911, "版本号区间非法（min 必须 ≤ max，且均为非负整数）", "sys_notification.version_range_invalid"),
+
     // ====== 会员 8001-8099（fitcoach-membership） ======
     MEMBERSHIP_REQUIRED(8001, "该功能需要会员才可使用，请先开通会员", "membership.required"),
     MEMBERSHIP_PLAN_NOT_FOUND(8002, "套餐不存在或已下架", "membership.plan_not_found"),
@@ -206,6 +219,10 @@ public enum ResultCode {
     TRAINING_EXERCISE_KEY_DUPLICATE(8202, "训练动作 key 已存在，请勿重复创建", "training_exercise.key_duplicate"),
     TRAINING_EXERCISE_DISABLED(8203, "该训练动作已下架", "training_exercise.disabled"),
     TRAINING_EXERCISE_EQUIPMENT_INVALID(8204, "器械类型不合法（仅支持 BARBELL/DUMBBELL/MACHINE/BODYWEIGHT/CABLE/CARDIO）", "training_exercise.equipment_invalid"),
+    TRAINING_EXERCISE_ICON_EMPTY(8205, "上传图标为空", "training_exercise.icon_empty"),
+    TRAINING_EXERCISE_ICON_TOO_LARGE(8206, "上传图标过大（最大 512KB）", "training_exercise.icon_too_large"),
+    TRAINING_EXERCISE_ICON_TYPE_INVALID(8207, "图标类型不合法（仅支持 JPEG/PNG/WebP）", "training_exercise.icon_type_invalid"),
+    TRAINING_EXERCISE_ICON_STORAGE_ERROR(8208, "图标保存失败，请稍后重试", "training_exercise.icon_storage_error"),
 
     // ====== 训练记录 8301-8399（fitcoach-training-record · TrainingRecord，用户手动写下的训练日志） ======
     TRAINING_RECORD_NOT_FOUND(8301, "训练记录不存在", "training_record.not_found"),

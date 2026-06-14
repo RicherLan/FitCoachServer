@@ -43,23 +43,45 @@ public class Exercise extends BaseEntity {
     private String exerciseKey;
 
     /**
-     * 显示名称（中文/可国际化）
+     * 显示名称（中文兜底字段，永远非空）。
+     * <p>多语言版本见 {@link #displayNameI18n}，按客户端 X-Client-Lang 自动选择，
+     * 缺失时回落到本字段。
      */
     @Column(name = "display_name", nullable = false, length = 128)
     private String displayName;
 
     /**
-     * 描述
+     * 显示名称的多语言 JSON（BCP-47 tag → 翻译）。
+     * <p>结构：{@code {"zh-CN":"深蹲","en":"Squat","ja":"スクワット",...}}。
+     * 由 {@link com.lanprojects.fitcoach.common.i18n.I18nText#pick} 解析；
+     * NULL/空/未命中目标语言时自动用 {@link #displayName} 兜底。
+     */
+    @Lob
+    @Column(name = "display_name_i18n", columnDefinition = "LONGTEXT")
+    private String displayNameI18n;
+
+    /**
+     * 描述（中文兜底字段）。多语言版本见 {@link #descriptionI18n}。
      */
     @Column(name = "description", length = 500)
     private String description;
 
+    /** 描述的多语言 JSON（结构同 {@link #displayNameI18n}） */
+    @Lob
+    @Column(name = "description_i18n", columnDefinition = "LONGTEXT")
+    private String descriptionI18n;
+
     /**
      * 涉及肌群描述（人类可读，例："股四头肌 · 臀大肌 · 腘绳肌"）。
-     * <p>结构化分组用 {@link #muscleGroup} 字段。
+     * <p>结构化分组用 {@link #muscleGroup} 字段。多语言版本见 {@link #musclesI18n}。
      */
     @Column(name = "muscles", length = 255)
     private String muscles;
+
+    /** 涉及肌群描述的多语言 JSON（结构同 {@link #displayNameI18n}） */
+    @Lob
+    @Column(name = "muscles_i18n", columnDefinition = "LONGTEXT")
+    private String musclesI18n;
 
     /**
      * 表情符号（列表页装饰用）

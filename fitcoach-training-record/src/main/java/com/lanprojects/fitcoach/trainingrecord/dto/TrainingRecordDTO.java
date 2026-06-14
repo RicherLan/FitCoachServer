@@ -87,6 +87,8 @@ public class TrainingRecordDTO {
         private String muscleGroup;
         private String equipment;
         private String emoji;
+        /** 自定义图标 URL 快照（相对路径，前端用 baseURL 拼成完整 URL）。优先级高于 emoji。 */
+        private String iconUrl;
         private List<SetDTO> sets;
 
         public static ExerciseDTO from(TrainingRecordExercise e) {
@@ -98,6 +100,7 @@ public class TrainingRecordDTO {
                     .muscleGroup(e.getMuscleGroup())
                     .equipment(e.getEquipment())
                     .emoji(e.getEmoji())
+                    .iconUrl(e.getIconUrl())
                     .sets(e.getSets().stream().map(SetDTO::from).toList())
                     .build();
         }

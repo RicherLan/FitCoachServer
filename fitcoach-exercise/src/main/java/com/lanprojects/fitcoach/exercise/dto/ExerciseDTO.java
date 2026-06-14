@@ -1,5 +1,6 @@
 package com.lanprojects.fitcoach.exercise.dto;
 
+import com.lanprojects.fitcoach.common.i18n.I18nText;
 import com.lanprojects.fitcoach.exercise.entity.Exercise;
 import lombok.Builder;
 import lombok.Data;
@@ -43,12 +44,17 @@ public class ExerciseDTO {
     /** 是否免费（客户端用于在卡片打"免费体验"标签） */
     private Boolean isFree;
 
+    /**
+     * 转 DTO 时自动按当前请求语言（{@link com.lanprojects.fitcoach.common.client.ClientContext#locale()}）
+     * 解析多语言字段；i18n 缺失 / 未命中目标语言时回落到旧单语言字段（永远非 null）。
+     * <p>非 HTTP 上下文（如定时任务、内部调用）下 locale 兜底为 zh-CN，相当于行为不变。
+     */
     public static ExerciseDTO from(Exercise e) {
         return ExerciseDTO.builder()
                 .exerciseKey(e.getExerciseKey())
-                .displayName(e.getDisplayName())
-                .description(e.getDescription())
-                .muscles(e.getMuscles())
+                .displayName(I18nText.pick(e.getDisplayNameI18n(), e.getDisplayName()))
+                .description(I18nText.pick(e.getDescriptionI18n(), e.getDescription()))
+                .muscles(I18nText.pick(e.getMusclesI18n(), e.getMuscles()))
                 .emoji(e.getEmoji())
                 .muscleGroup(e.getMuscleGroup())
                 .cameraSetupJson(e.getCameraSetupJson())

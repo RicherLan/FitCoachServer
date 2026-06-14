@@ -68,9 +68,25 @@ public class TrainingExercise extends BaseEntity {
 
     /**
      * 表情符号（动作选择器卡片装饰用，与肌群 emoji 互补）。
+     *
+     * <p><b>渲染优先级（v2）</b>：客户端按 {@code iconUrl > emoji > 本地兜底 emoji} 顺序展示。
+     * 当 {@link #iconUrl} 非空时，emoji 仅作为 url 加载失败 / 离线缓存空的二级兜底。
      */
     @Column(name = "emoji", length = 8)
     private String emoji;
+
+    /**
+     * 自定义图标 URL（admin 上传 PNG/JPG/WebP，存 server 静态资源目录，返回相对路径如
+     * {@code /static/trainingexercise-icon/BARBELL_BENCH_PRESS/xxx.png}）。
+     *
+     * <p>设计原因：Unicode emoji 字符集对健身动作（飞鸟 / 划船 / 弯举 / 提踵 / 卷腹 ...）
+     * 大量没有真实对应符号，硬凑 emoji 反而错位；本字段允许运营在 admin 后台上传精准小图，
+     * 客户端**优先**渲染。为空时回落到 {@link #emoji} → 本地内置兜底 emoji。
+     *
+     * <p>客户端拿到的是相对路径，由 axios 实例 baseURL 拼接成完整 URL，跨网络环境通用。
+     */
+    @Column(name = "icon_url", length = 255)
+    private String iconUrl;
 
     /**
      * 肌群分类 key（软外键引用 {@code muscle_group.group_key}）。

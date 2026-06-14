@@ -27,8 +27,15 @@ public class TrainingExerciseDTO {
     /** 描述 / 训练要点 */
     private String description;
 
-    /** 表情符号 */
+    /** 表情符号（iconUrl 加载失败 / 离线时的二级兜底） */
     private String emoji;
+
+    /**
+     * 自定义图标 URL（相对路径，例：{@code /static/trainingexercise-icon/BARBELL_BENCH_PRESS/xxx.png}）。
+     * <p>客户端渲染优先级：{@code iconUrl > emoji > 本地内置兜底 emoji}。
+     * <p>客户端 axios 实例已配置 baseURL，渲染时直接 {@code <Image source={{uri: baseURL + iconUrl}} />}。
+     */
+    private String iconUrl;
 
     /** 肌群 groupKey，例："CHEST" / "BICEPS" */
     private String muscleGroup;
@@ -45,6 +52,7 @@ public class TrainingExerciseDTO {
                 .displayName(t.getDisplayName())
                 .description(t.getDescription())
                 .emoji(t.getEmoji())
+                .iconUrl(t.getIconUrl())
                 .muscleGroup(t.getMuscleGroup())
                 .equipment(t.getEquipment())
                 .isCustom(Boolean.TRUE.equals(t.getIsCustom()))

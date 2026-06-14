@@ -45,6 +45,7 @@ public class TrackService {
 
     private final TrackEventRepository trackEventRepository;
     private final TrackRateLimiter rateLimiter;
+    private final GeoIPService geoIPService;
 
     /**
      * 接收一批埋点。
@@ -108,8 +109,20 @@ public class TrackService {
             entity.setBundleVersion(bundleVersion);
             entity.setOsVersion(item.getOsVersion());
             entity.setLocale(locale);
-            // V1：直接用 client 上报的 region 兜底；V2 在拦截器里用 GeoIP 覆盖后写回 ClientContext
-            entity.setRegion(item.getRegion());
+            // V1：直接用 client 上报的 region 兜底
+            // V2（Phase 3）：在拦截器里用 GeoIP 覆盖后写回 ClientContext
+            // 实现：在 HttpServletRequest 拦截器中调用 geoIPService.getCountryCodeByIP(clientIP)
+            // 然后通过 ClientContext.setRegion() 覆盖 client 上报的值
+            String region = item.getRegion();
+            // TODO: Phase 3 实现 GeoIP 覆盖逻辑
+            // if (region == null || region.isBlank()) {
+            //     String clientIP = getClientIPFromRequest();
+            //     String geoRegion = geoIPService.getCountryCodeByIP(clientIP);
+            //     if (geoRegion != null) {
+            //         region = geoRegion;
+            //     }
+            // }
+            entity.setRegion(region);
             entity.setTimezone(item.getTimezone());
             entity.setNetworkType(item.getNetworkType());
             // client_ts 不信，但要存，便于排查客户端时间漂移

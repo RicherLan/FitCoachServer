@@ -4,6 +4,7 @@ import com.lanprojects.fitcoach.common.entity.BaseEntity;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.Index;
+import jakarta.persistence.Lob;
 import jakarta.persistence.Table;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
@@ -46,9 +47,21 @@ public class MuscleGroupEntity extends BaseEntity {
     @Column(name = "group_key", nullable = false, length = 32)
     private String groupKey;
 
-    /** 显示名称（中文/可国际化），客户端首页类目卡片标题用。例："胸" "腿" */
+    /**
+     * 显示名称（中文兜底字段），客户端首页类目卡片标题用。例："胸" "腿"。
+     * 多语言版本见 {@link #displayNameI18n}。
+     */
     @Column(name = "display_name", nullable = false, length = 64)
     private String displayName;
+
+    /**
+     * 显示名称的多语言 JSON（BCP-47 tag → 翻译）。
+     * 由 {@link com.lanprojects.fitcoach.common.i18n.I18nText#pick} 解析；
+     * NULL/未命中目标语言时自动用 {@link #displayName} 兜底。
+     */
+    @Lob
+    @Column(name = "display_name_i18n", columnDefinition = "LONGTEXT")
+    private String displayNameI18n;
 
     /** 表情符号（首页类目卡片装饰用）。例："💪" "🦿" */
     @Column(name = "emoji", length = 8)

@@ -25,6 +25,11 @@ public class AdminTrainingExerciseDto {
     private String displayName;
     private String description;
     private String emoji;
+    /**
+     * 自定义图标 URL（admin 上传后回填，相对路径如 {@code /static/trainingexercise-icon/...}）。
+     * <p>前端列表优先用本字段渲染图标，为空时回落到 emoji。
+     */
+    private String iconUrl;
     private String muscleGroup;
     private String equipment;
     private Boolean isCustom;
@@ -41,6 +46,7 @@ public class AdminTrainingExerciseDto {
                 .displayName(e.getDisplayName())
                 .description(e.getDescription())
                 .emoji(e.getEmoji())
+                .iconUrl(e.getIconUrl())
                 .muscleGroup(e.getMuscleGroup())
                 .equipment(e.getEquipment())
                 .isCustom(Boolean.TRUE.equals(e.getIsCustom()))

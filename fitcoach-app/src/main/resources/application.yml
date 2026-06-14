@@ -71,6 +71,11 @@ upload:
     mapping-max-size-bytes: 104857600                 # 100MB（ProGuard/R8 mapping 文件）
     max-content-length: 1000                          # 正文最长 1000 字
     allowed-content-types: image/jpeg,image/png,image/webp
+  # 训练动作自定义图标 - admin 在「训练动作库」编辑页上传，客户端 iconUrl 优先于 emoji
+  training-exercise-icon:
+    sub-dir: trainingexercise-icon
+    max-size-bytes: 524288                            # 512KB（64x64/128x128 小图够用）
+    allowed-content-types: image/jpeg,image/png,image/webp
 
 # ====== 客户端日志拉取（fitcoach-log） ======
 # admin 后台触发 → 客户端 120s 轮询 pending → 打包 zip 上传 → admin 下载排查

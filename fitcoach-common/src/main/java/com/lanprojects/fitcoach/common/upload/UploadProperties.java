@@ -46,6 +46,9 @@ public class UploadProperties {
     /** App 版本安装包 + Mapping 文件上传配置 */
     private AppVersion appversion = new AppVersion();
 
+    /** 训练动作自定义图标上传配置 */
+    private TrainingExerciseIcon trainingExerciseIcon = new TrainingExerciseIcon();
+
     @Data
     public static class Avatar {
         /** 头像存放的相对子目录（拼到 baseDir 之后） */
@@ -106,5 +109,28 @@ public class UploadProperties {
 
         /** Mapping 文件最大字节数 */
         private long mappingMaxSizeBytes = 100 * 1024 * 1024L;  // 100MB
+    }
+
+    /**
+     * 训练动作自定义图标上传配置 — admin 在「训练动作库」编辑页上传 PNG/JPG/WebP 小图，
+     * 客户端按 iconUrl 优先渲染，emoji 作为加载失败 / 离线兜底。
+     *
+     * <p>设计取舍：仅允许位图（JPEG/PNG/WebP），不开 SVG —— 因为 SVG 可内嵌脚本，
+     * 客户端 FastImage 也不直接支持 SVG，避免运营误传引入额外渲染依赖。
+     */
+    @Data
+    public static class TrainingExerciseIcon {
+        /** 图标存放子目录（最终路径 baseDir/trainingexercise-icon/<exerciseKey>/uuid.ext） */
+        private String subDir = "trainingexercise-icon";
+
+        /** 单图最大字节数。图标是 64x64 / 128x128 小图，512KB 足够覆盖高质量 PNG */
+        private long maxSizeBytes = 512 * 1024L;
+
+        /** 允许的 MIME 类型（与客户端 FastImage 支持的位图格式对齐） */
+        private List<String> allowedContentTypes = Arrays.asList("image/jpeg", "image/png", "image/webp");
+
+        public List<String> getAllowedContentTypesView() {
+            return Collections.unmodifiableList(allowedContentTypes);
+        }
     }
 }

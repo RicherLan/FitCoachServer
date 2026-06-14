@@ -86,4 +86,77 @@ public interface TrackEventRepository extends JpaRepository<TrackEventEntity, Lo
         String getEventKey();
         Long getDeviceUv();
     }
+
+    /**
+     * 按事件 key + 时间窗 + 平台 + 地区查询不同用户数（漏斗分析用）
+     */
+    @Query("""
+        SELECT COUNT(DISTINCT e.userId)
+        FROM TrackEventEntity e
+        WHERE e.eventKey = :eventKey
+          AND e.serverTs BETWEEN :startTs AND :endTs
+          AND (:platform IS NULL OR e.platform = :platform)
+          AND (:region IS NULL OR e.region = :region)
+        """)
+    long countDistinctUsersByEventKey(
+            @Param("eventKey") String eventKey,
+            @Param("startTs") Long startTs,
+            @Param("endTs") Long endTs,
+            @Param("platform") String platform,
+            @Param("region") String region);
+
+    /**
+     * 按事件 key + 时间窗 + 平台 + 地区查询不同设备数（漏斗分析用）
+     */
+    @Query("""
+        SELECT COUNT(DISTINCT e.deviceId)
+        FROM TrackEventEntity e
+        WHERE e.eventKey = :eventKey
+          AND e.serverTs BETWEEN :startTs AND :endTs
+          AND (:platform IS NULL OR e.platform = :platform)
+          AND (:region IS NULL OR e.region = :region)
+        """)
+    long countDistinctDevicesByEventKey(
+            @Param("eventKey") String eventKey,
+            @Param("startTs") Long startTs,
+            @Param("endTs") Long endTs,
+            @Param("platform") String platform,
+            @Param("region") String region);
+
+    /**
+     * 按事件 key + 时间窗查询总数（自定义报表用）
+     */
+    long countByEventKeyAndServerTsBetween(String eventKey, Long startTs, Long endTs);
+
+    /**
+     * 按事件 key + 时间窗 + 平台查询总数（自定义报表用）
+     */
+    @Query("""
+        SELECT COUNT(e)
+        FROM TrackEventEntity e
+        WHERE e.eventKey = :eventKey
+          AND e.serverTs BETWEEN :startTs AND :endTs
+          AND e.platform = :platform
+        """)
+    long countByEventKeyAndServerTsBetweenAndPlatform(
+            @Param("eventKey") String eventKey,
+            @Param("startTs") Long startTs,
+            @Param("endTs") Long endTs,
+            @Param("platform") String platform);
+
+    /**
+     * 按事件 key + 时间窗 + 地区查询总数（自定义报表用）
+     */
+    @Query("""
+        SELECT COUNT(e)
+        FROM TrackEventEntity e
+        WHERE e.eventKey = :eventKey
+          AND e.serverTs BETWEEN :startTs AND :endTs
+          AND e.region = :region
+        """)
+    long countByEventKeyAndServerTsBetweenAndRegion(
+            @Param("eventKey") String eventKey,
+            @Param("startTs") Long startTs,
+            @Param("endTs") Long endTs,
+            @Param("region") String region);
 }

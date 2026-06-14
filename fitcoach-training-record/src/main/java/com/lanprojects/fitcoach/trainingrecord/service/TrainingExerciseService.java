@@ -28,6 +28,7 @@ public class TrainingExerciseService {
 
     private final TrainingExerciseRepository trainingExerciseRepository;
     private final MuscleGroupRepository muscleGroupRepository;
+    private final TrainingExerciseIconStorageService iconStorageService;
 
     /** 当前允许的器械类型集合（与 {@link ResultCode#TRAINING_EXERCISE_EQUIPMENT_INVALID} 提示文案一致） */
     public static final Set<String> ALLOWED_EQUIPMENTS = Set.of(
@@ -135,10 +136,60 @@ public class TrainingExerciseService {
      *
      * <p>历史训练记录中引用本动作的 TrainingRecordExercise 不会受影响（它存的是 key + name 快照），
      * 因此可以安全删除；运营更常用的做法是 {@code enabled = false} 软下架。
+     *
+     * <p>会顺便删除该动作关联的自定义图标文件（如果有），避免遗留垃圾文件。
      */
     public void delete(Long id) {
         TrainingExercise existing = findById(id);
+        // 顺手把图标文件清掉（DB 行马上就要删，磁盘文件留着也没用）
+        if (existing.getIconUrl() != null) {
+            iconStorageService.deleteIconByUrl(existing.getIconUrl());
+        }
         trainingExerciseRepository.delete(existing);
         log.info("[training-exercise] 删除动作 id={} key={}", id, existing.getExerciseKey());
+    }
+
+    // ====== Admin 写操作（图标专用接口） ======
+
+    /**
+     * 上传 / 替换训练动作的自定义图标。
+     *
+     * <p>覆盖语义：若该动作已有图标文件，先删除旧文件再保存新文件，并更新 DB 中的 iconUrl。
+     *
+     * @param id   动作 ID
+     * @param file 上传图标（JPEG/PNG/WebP，≤ 512KB）
+     * @return 更新后的动作实体（iconUrl 已回填新地址）
+     */
+    public TrainingExercise attachIconFile(Long id, org.springframework.web.multipart.MultipartFile file) {
+        TrainingExercise existing = findById(id);
+        // 先删旧图（不影响 DB，文件不存在也不报错）
+        if (existing.getIconUrl() != null) {
+            iconStorageService.deleteIconByUrl(existing.getIconUrl());
+        }
+        TrainingExerciseIconStorageService.IconStoreResult result =
+                iconStorageService.saveIcon(existing.getExerciseKey(), file);
+        existing.setIconUrl(result.url());
+        TrainingExercise saved = trainingExerciseRepository.save(existing);
+        log.info("[training-exercise] 图标已上传 id={} key={} url={} size={}B",
+                saved.getId(), saved.getExerciseKey(), saved.getIconUrl(), result.size());
+        return saved;
+    }
+
+    /**
+     * 删除训练动作的自定义图标（仅删文件 + 清 iconUrl 字段，不删动作记录）。
+     * <p>删除后客户端会回落到 emoji 渲染。
+     *
+     * @param id 动作 ID
+     * @return 更新后的动作实体（iconUrl 已清空）
+     */
+    public TrainingExercise removeIconFile(Long id) {
+        TrainingExercise existing = findById(id);
+        if (existing.getIconUrl() != null) {
+            iconStorageService.deleteIconByUrl(existing.getIconUrl());
+            existing.setIconUrl(null);
+            existing = trainingExerciseRepository.save(existing);
+            log.info("[training-exercise] 图标已删除 id={} key={}", existing.getId(), existing.getExerciseKey());
+        }
+        return existing;
     }
 }

@@ -77,6 +77,14 @@ public class TrainingRecordExercise extends BaseEntity {
     private String emoji;
 
     /**
+     * 自定义图标 URL 快照（写入时从 {@code training_exercise.icon_url} 拷贝）。
+     * <p>历史训练记录展示时**优先**渲染该 URL；为空回落到 {@link #emoji}。
+     * 即便 admin 后续修改 / 删除原动作的图标，历史记录依旧显示当时上传的图标。
+     */
+    @Column(name = "icon_url", length = 255)
+    private String iconUrl;
+
+    /**
      * 各组数据。级联保存 + 孤儿删除。
      * <p>插入顺序由 Service 在写入时按 setIndex 升序，查询用 @OrderBy 保证顺序稳定。
      */

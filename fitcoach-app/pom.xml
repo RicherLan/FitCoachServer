@@ -58,6 +58,10 @@
         </dependency>
         <dependency>
             <groupId>com.lanprojects</groupId>
+            <artifactId>fitcoach-notification</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>com.lanprojects</groupId>
             <artifactId>fitcoach-admin</artifactId>
         </dependency>
         <dependency>
