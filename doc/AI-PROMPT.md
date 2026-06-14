@@ -14,7 +14,7 @@
 | **FitCoachServer**（本仓） | `~/code/lanprojects/FitCoachServer` | Spring Boot 后端（10+ Maven 模块，Docker 单机部署） |
 | FitCoachRN | `~/code/lanprojects/FitCoachRN` | RN 客户端（Android 已实装） |
 | FitCoachAdminManager | `~/code/lanprojects/FitCoachAdminManager` | 管理后台（React + Vite + AntD） |
-| fitcoach-website | `~/code/lanprojects/fitcoach-website` | 官网静态站（HTML/CSS，GitHub Pages 部署，绑定 `migofitai.com`）+ 品牌 VI 单一来源 [`BRAND.md`](../../fitcoach-website/BRAND.md) |
+| fitcoach-website | `~/code/lanprojects/fitcoach-website` | 官网静态站（纯 HTML/CSS，部署在本 server 同台 CVM 的 nginx 容器，发布脚本就在本仓 [`shell/deploy-website.sh`](../shell/deploy-website.sh)）+ 品牌 VI 单一来源 [`BRAND.md`](../../fitcoach-website/BRAND.md) |
 
 跨仓改动**必须多仓同步提**（举例：加一个 API → server 加 controller + RN 加 api 调用 + admin 加管理页 → 三仓各 commit + push；改公司信息 / 品牌 → 四仓同步）。
 
