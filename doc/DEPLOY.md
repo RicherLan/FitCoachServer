@@ -137,7 +137,7 @@ vim .env.prod
 |---|---|---|
 | `MYSQL_ROOT_PASSWORD` | MySQL root 密码 | `openssl rand -base64 24` 生成 |
 | `MYSQL_PASSWORD` / `DB_PASSWORD` | 业务库密码（两个保持一致） | 同上 |
-| `CORS_ALLOWED_ORIGINS` | 前端域名 | `https://admin.fitcoach.com,https://app.fitcoach.com` |
+| `CORS_ALLOWED_ORIGINS` | 前端域名 | `https://migofitai.com` |
 | `SMS_PROVIDER` | 短信渠道 | `tencent`（生产）/ `mock`（不真发，仅测试） |
 | `TENCENT_*` | 腾讯云短信 4 件套 | 从腾讯云 SMS 控制台获取 |
 | `CAPTCHA_*` | 腾讯行为验证码 | 从验证码控制台获取 |
@@ -163,11 +163,11 @@ bash shell/deploy.sh
 bash shell/deploy.sh --status
 
 # 2. 健康检查
-curl http://YOUR_SERVER_IP/api/auth/ping
+curl https://migofitai.com/api/auth/ping
 # 应返回: {"code":0,"message":"ok","data":"pong"}
 
 # 3. nginx 健康
-curl http://YOUR_SERVER_IP/nginx-health
+curl https://migofitai.com/nginx-health
 # 应返回: ok
 
 # 4. 应用日志
@@ -177,7 +177,7 @@ bash shell/deploy.sh --logs
 ### 3.5 首次必做
 
 1. **登录 admin 后台改默认密码**
-   - 访问 `http://YOUR_SERVER_IP/`（admin 静态资源就绪后）
+   - 访问 `https://migofitai.com/`（admin 静态资源就绪后）
    - 默认账号：`admin / admin123` —— **立即修改！**
 
 2. **配置数据库自动备份**（见 [4.4](#44-数据库备份)）
@@ -256,63 +256,69 @@ docker image prune -a    # 删所有未使用镜像（小心！会删 mysql/ngin
 
 ### 5.1 域名解析
 
-去你的域名服务商（腾讯云 DNSPod / 阿里云 DNS）添加 A 记录：
+去腾讯云 DNSPod 控制台确认 A 记录已生效：
 ```
-api.fitcoach.com    →    YOUR_SERVER_IP
-admin.fitcoach.com  →    YOUR_SERVER_IP
+migofitai.com    →    1.14.174.249
 ```
 
-等 DNS 生效（通常 1-10 分钟），验证：
+验证：
 ```bash
-dig +short api.fitcoach.com
+dig +short migofitai.com
+# 应返回 1.14.174.249
 ```
 
 ### 5.2 申请证书
 
 ```bash
-# 1. 临时停 nginx（certbot 要占 80 端口验证）
+# 1. 临时停 nginx（certbot standalone 模式要占 80 端口验证）
 docker compose -f shell/docker-compose.prod.yml --env-file .env.prod stop nginx
 
-# 2. 安装 certbot 并申请
+# 2. 安装 certbot 并申请（交互时输入邮箱、同意条款即可）
 sudo apt install -y certbot
-sudo certbot certonly --standalone -d api.fitcoach.com
+sudo certbot certonly --standalone -d migofitai.com
 
-# 3. 证书会生成在 /etc/letsencrypt/live/api.fitcoach.com/
-sudo ls /etc/letsencrypt/live/api.fitcoach.com/
+# 3. 证书会生成在 /etc/letsencrypt/live/migofitai.com/
+sudo ls /etc/letsencrypt/live/migofitai.com/
 # fullchain.pem  privkey.pem  ...
 
-# 4. 拷贝到挂载目录
-sudo cp /etc/letsencrypt/live/api.fitcoach.com/fullchain.pem /data/fitcoach/certs/
-sudo cp /etc/letsencrypt/live/api.fitcoach.com/privkey.pem /data/fitcoach/certs/
+# 4. 拷贝到 Docker 挂载的 certs 目录
+sudo cp /etc/letsencrypt/live/migofitai.com/fullchain.pem /data/fitcoach/certs/
+sudo cp /etc/letsencrypt/live/migofitai.com/privkey.pem /data/fitcoach/certs/
 sudo chmod 644 /data/fitcoach/certs/*.pem
 ```
 
 ### 5.3 启用 HTTPS
 
-编辑 `nginx/fitcoach.conf`：
-1. 取消最下方 `server { listen 443 ssl http2; ... }` 整段的注释
-2. 把 `server_name api.example.com` 改成你的真实域名
-3. 上方 `server { listen 80; }` 改成只做 301 跳转：
-   ```nginx
-   server {
-       listen 80;
-       server_name api.fitcoach.com;
-       return 301 https://$host$request_uri;
-   }
-   ```
+`nginx/fitcoach.conf` 已预配好 HTTPS（HTTP 80 自动 301 跳转到 HTTPS 443）。
 
-重启 nginx：
+只需重新部署即可生效：
 ```bash
-docker compose -f shell/docker-compose.prod.yml --env-file .env.prod restart nginx
+bash shell/deploy.sh
+```
+
+或只重启 nginx：
+```bash
+docker compose -f shell/docker-compose.prod.yml --env-file .env.prod start nginx
+```
+
+验证：
+```bash
+# HTTPS 应正常返回
+curl https://migofitai.com/api/auth/ping
+
+# HTTP 应返回 301 跳转
+curl -I http://migofitai.com
+# 应看到: HTTP/1.1 301 Moved Permanently
+# Location: https://migofitai.com/
 ```
 
 ### 5.4 自动续期
 
-Let's Encrypt 证书 90 天有效，配 cron 自动续：
+Let's Encrypt 证书 90 天有效，配 cron 自动续（每月 1 号凌晨 2 点）：
 ```bash
 crontab -e
 # 加：
-0 2 1 * * sudo certbot renew --quiet && cp /etc/letsencrypt/live/api.fitcoach.com/*.pem /data/fitcoach/certs/ && docker compose -f /opt/FitCoachServer/shell/docker-compose.prod.yml --env-file /opt/FitCoachServer/.env.prod restart nginx
+0 2 1 * * docker compose -f /opt/FitCoachServer/shell/docker-compose.prod.yml --env-file /opt/FitCoachServer/.env.prod stop nginx && sudo certbot renew --quiet && sudo cp /etc/letsencrypt/live/migofitai.com/fullchain.pem /data/fitcoach/certs/ && sudo cp /etc/letsencrypt/live/migofitai.com/privkey.pem /data/fitcoach/certs/ && docker compose -f /opt/FitCoachServer/shell/docker-compose.prod.yml --env-file /opt/FitCoachServer/.env.prod start nginx
 ```
 
 ---
