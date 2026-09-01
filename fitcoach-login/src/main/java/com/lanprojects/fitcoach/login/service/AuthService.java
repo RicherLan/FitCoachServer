@@ -56,6 +56,7 @@ public class AuthService {
     private final SysConfigService sysConfigService;
     private final UploadProperties uploadProperties;
     private final AccountGenerator accountGenerator;
+    private final TokenBlacklistService tokenBlacklistService;
 
     /**
      * 微信登录
@@ -143,6 +144,17 @@ public class AuthService {
     }
 
     /**
+     * 获取 token 的剩余有效期（毫秒）。
+     * <p>供 {@code AuthController.logout()} 调用，用作黑名单缓存的 TTL。
+     *
+     * @param token JWT token
+     * @return 剩余有效期毫秒数；已过期或解析失败返回 0
+     */
+    public long getTokenRemainingMs(String token) {
+        return JwtUtils.getRemainingMs(token, requireJwtSecret());
+    }
+
+    /**
      * 用 refresh token 换取新的 access token + refresh token（refresh 也滚动续期）。
      * <p>refreshToken 也参与单设备互踢校验：旧设备拿着旧 refreshToken 来续 → sid 不匹配即抛
      * {@link ResultCode#SESSION_KICKED}，避免被踢的设备靠 refresh 偷偷续命。
@@ -164,6 +176,11 @@ public class AuthService {
      * <p>抽公共方法供 getCurrentUser / refresh 共用，保证语义一致。
      */
     private User parseAndAssertSession(String token, String expectedType) {
+        // 黑名单检查：已登出的 token 立即拒绝，无需走后续解析和数据库查询
+        if (tokenBlacklistService.isBlacklisted(token)) {
+            throw new BusinessException(ResultCode.TOKEN_INVALID, "token 已失效（已登出）");
+        }
+
         String jwtSecret = requireJwtSecret();
         JwtUtils.JwtPayload payload = JwtUtils.parsePayload(token, jwtSecret, expectedType);
 

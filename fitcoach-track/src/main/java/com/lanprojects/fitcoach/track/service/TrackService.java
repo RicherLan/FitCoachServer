@@ -3,14 +3,18 @@ package com.lanprojects.fitcoach.track.service;
 import com.lanprojects.fitcoach.common.client.ClientContext;
 import com.lanprojects.fitcoach.common.exception.BusinessException;
 import com.lanprojects.fitcoach.common.model.ResultCode;
+import com.lanprojects.fitcoach.common.security.ClientIpResolver;
 import com.lanprojects.fitcoach.track.dto.TrackEventBatchRequest;
 import com.lanprojects.fitcoach.track.dto.TrackEventItem;
 import com.lanprojects.fitcoach.track.entity.TrackEventEntity;
 import com.lanprojects.fitcoach.track.repository.TrackEventRepository;
+import jakarta.servlet.http.HttpServletRequest;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.web.context.request.RequestContextHolder;
+import org.springframework.web.context.request.ServletRequestAttributes;
 
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -109,19 +113,17 @@ public class TrackService {
             entity.setBundleVersion(bundleVersion);
             entity.setOsVersion(item.getOsVersion());
             entity.setLocale(locale);
-            // V1：直接用 client 上报的 region 兜底
-            // V2（Phase 3）：在拦截器里用 GeoIP 覆盖后写回 ClientContext
-            // 实现：在 HttpServletRequest 拦截器中调用 geoIPService.getCountryCodeByIP(clientIP)
-            // 然后通过 ClientContext.setRegion() 覆盖 client 上报的值
+            // region 策略：优先用客户端上报值，缺失时用 GeoIP 兜底
             String region = item.getRegion();
-            // TODO: Phase 3 实现 GeoIP 覆盖逻辑
-            // if (region == null || region.isBlank()) {
-            //     String clientIP = getClientIPFromRequest();
-            //     String geoRegion = geoIPService.getCountryCodeByIP(clientIP);
-            //     if (geoRegion != null) {
-            //         region = geoRegion;
-            //     }
-            // }
+            if (region == null || region.isBlank()) {
+                String clientIp = resolveClientIp();
+                if (clientIp != null) {
+                    String geoRegion = geoIPService.getCountryCodeByIP(clientIp);
+                    if (geoRegion != null) {
+                        region = geoRegion;
+                    }
+                }
+            }
             entity.setRegion(region);
             entity.setTimezone(item.getTimezone());
             entity.setNetworkType(item.getNetworkType());
@@ -148,6 +150,25 @@ public class TrackService {
     }
 
     // ====== Helpers ======
+
+    /**
+     * 从当前 HTTP 请求中解析客户端真实 IP（通过 RequestContextHolder + ClientIpResolver）。
+     * <p>用于 GeoIP 兜底：当客户端未上报 region 时，根据 IP 反查国家码。
+     *
+     * @return 客户端 IP；非 HTTP 上下文返回 null
+     */
+    private static String resolveClientIp() {
+        try {
+            var attrs = RequestContextHolder.getRequestAttributes();
+            if (attrs instanceof ServletRequestAttributes sra) {
+                HttpServletRequest request = sra.getRequest();
+                return ClientIpResolver.resolve(request);
+            }
+        } catch (Exception e) {
+            // 非 web 上下文（如异步线程），静默返回 null
+        }
+        return null;
+    }
 
     private static String nullSafe(String s) {
         return s == null ? "" : s;

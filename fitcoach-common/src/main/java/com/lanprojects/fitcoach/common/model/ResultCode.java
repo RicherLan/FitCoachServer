@@ -245,7 +245,11 @@ public enum ResultCode {
     /** eventKey 命名违反约定（空、>64 字符）；属于客户端 bug，server 端会跳过单条但保留此码备用 */
     TRACK_EVENT_KEY_INVALID(8403, "埋点 eventKey 不合法", "track.event_key_invalid"),
     /** deviceId 维度 200 批次/分钟限流；客户端收到此码后应延后到下个窗口（建议退避 60s+） */
-    TRACK_RATE_LIMITED(8404, "埋点上报频率过高，请稍后重试", "track.rate_limited");
+    TRACK_RATE_LIMITED(8404, "埋点上报频率过高，请稍后重试", "track.rate_limited"),
+
+    // ====== 通用 9xxx ======
+    /** 功能尚未实现 —— 用于占位接口显式返回 501，避免前端误以为操作成功 */
+    FEATURE_NOT_IMPLEMENTED(9001, "该功能正在开发中，敬请期待", "common.feature_not_implemented");
 
     private final int code;
     /** zh-CN 内置文案，作为 i18n properties 全部漏配时的最终兜底；不建议直接下发，请走 I18nMessages 翻译 */

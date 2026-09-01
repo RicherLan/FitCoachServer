@@ -138,6 +138,39 @@ public class JwtUtils {
         }
     }
 
+    /**
+     * 获取 token 的剩余有效期（毫秒）。
+     * <p>不做签名校验 / 类型校验，仅解析 expiration claim。
+     * 用于 token 黑名单：加入黑名单时需要知道 token 还有多久过期，以此作为缓存 TTL。
+     *
+     * @return 剩余毫秒数；token 已过期返回 0，解析失败返回 0
+     */
+    public static long getRemainingMs(String token, String secret) {
+        if (token == null || token.isBlank()) {
+            return 0;
+        }
+        try {
+            SecretKey key = Keys.hmacShaKeyFor(secret.getBytes(StandardCharsets.UTF_8));
+            Claims claims = Jwts.parser()
+                    .verifyWith(key)
+                    .build()
+                    .parseSignedClaims(token)
+                    .getPayload();
+            Date expiration = claims.getExpiration();
+            if (expiration == null) {
+                return 0;
+            }
+            long remaining = expiration.getTime() - System.currentTimeMillis();
+            return Math.max(remaining, 0);
+        } catch (ExpiredJwtException e) {
+            // token 已过期，无需加黑名单
+            return 0;
+        } catch (Exception e) {
+            log.warn("解析 token 过期时间失败: {}", e.getClass().getSimpleName());
+            return 0;
+        }
+    }
+
     // ====== 内部 ======
 
     private static String generate(String uid, String secret, long expireMs, String type, String sessionId) {

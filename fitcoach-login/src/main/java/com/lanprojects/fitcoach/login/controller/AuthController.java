@@ -15,6 +15,7 @@ import com.lanprojects.fitcoach.login.service.AuthService;
 import com.lanprojects.fitcoach.login.service.CaptchaService;
 import com.lanprojects.fitcoach.login.service.OtpService;
 import com.lanprojects.fitcoach.login.service.PasswordService;
+import com.lanprojects.fitcoach.login.service.TokenBlacklistService;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.validation.Valid;
@@ -40,6 +41,7 @@ public class AuthController {
     private final CaptchaService captchaService;
     private final OtpService otpService;
     private final PasswordService passwordService;
+    private final TokenBlacklistService tokenBlacklistService;
 
     /**
      * 微信登录
@@ -143,19 +145,24 @@ public class AuthController {
      * 登出
      * <p>POST /api/auth/logout
      * <br>Header: Authorization: Bearer {accessToken}
-     * <p>当前实现为"占位"接口：仅校验 token 合法、给客户端一个明确入口。
-     * <br>TODO 接入 Redis 后在这里把 token 加入黑名单，让其在自然过期前立即失效。
+     * <p>将 access token 加入黑名单（Caffeine 本地缓存），让其在自然过期前立即失效。
+     * <br>幂等：token 已失效（过期 / 非法）也返回成功。
      */
     @PostMapping("/logout")
     public Result<Void> logout(
             @RequestHeader(value = "Authorization", required = false) String authorization) {
-        // 仅校验合法性即可；此处不抛错的话登出永远成功（即便 token 已无效）
         try {
-            authService.getCurrentUser(extractToken(authorization));
+            String token = extractToken(authorization);
+            // 先校验 token 合法性（顺带触发互踢/禁用等校验）
+            authService.getCurrentUser(token);
+            // 校验通过 → 加入黑名单，TTL = token 剩余有效期
+            long remainingMs = authService.getTokenRemainingMs(token);
+            tokenBlacklistService.blacklist(token, remainingMs);
+            log.info("logout 成功，token 已加入黑名单");
         } catch (BusinessException ignore) {
             // token 已失效也允许登出，幂等处理
+            log.info("logout 接口被调用（token 已失效，幂等处理）");
         }
-        log.info("logout 接口被调用");
         return Result.success();
     }
 
