@@ -113,9 +113,9 @@ sudo chown -R $USER:$USER /data/fitcoach
 ### 3.1 拉代码
 
 ```bash
-# 建议放在 /opt 下，便于多人协作
-sudo mkdir -p /opt && cd /opt
-sudo chown $USER:$USER /opt
+# 代码放在 /opt/fitcoach 下
+sudo mkdir -p /opt/fitcoach && cd /opt/fitcoach
+sudo chown $USER:$USER /opt/fitcoach
 
 git clone git@github.com:RicherLan/FitCoachServer.git
 cd FitCoachServer
@@ -191,7 +191,7 @@ bash shell/deploy.sh --logs
 ### 4.1 部署新版本
 
 ```bash
-cd /opt/FitCoachServer
+cd /opt/fitcoach/FitCoachServer
 bash shell/deploy.sh
 ```
 
@@ -318,7 +318,7 @@ Let's Encrypt 证书 90 天有效，配 cron 自动续（每月 1 号凌晨 2 �
 ```bash
 crontab -e
 # 加：
-0 2 1 * * docker compose -f /opt/FitCoachServer/shell/docker-compose.prod.yml --env-file /opt/FitCoachServer/.env.prod stop nginx && sudo certbot renew --quiet && sudo cp /etc/letsencrypt/live/migofitai.com/fullchain.pem /data/fitcoach/certs/ && sudo cp /etc/letsencrypt/live/migofitai.com/privkey.pem /data/fitcoach/certs/ && docker compose -f /opt/FitCoachServer/shell/docker-compose.prod.yml --env-file /opt/FitCoachServer/.env.prod start nginx
+0 2 1 * * docker compose -f /opt/fitcoach/FitCoachServer/shell/docker-compose.prod.yml --env-file /opt/fitcoach/FitCoachServer/.env.prod stop nginx && sudo certbot renew --quiet && sudo cp /etc/letsencrypt/live/migofitai.com/fullchain.pem /data/fitcoach/certs/ && sudo cp /etc/letsencrypt/live/migofitai.com/privkey.pem /data/fitcoach/certs/ && docker compose -f /opt/fitcoach/FitCoachServer/shell/docker-compose.prod.yml --env-file /opt/fitcoach/FitCoachServer/.env.prod start nginx
 ```
 
 ---
