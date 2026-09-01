@@ -18,6 +18,7 @@
 #   - /data/fitcoach/uploads  → 用户上传的头像/反馈附件
 #   - /data/fitcoach/logs     → 应用日志
 #   - /data/fitcoach/certs    → SSL 证书（certbot 申请）
+#   - /data/fitcoach/certbot  → certbot webroot 验证目录
 #
 # 网络拓扑：
 #   宿主机 :80/:443
@@ -170,6 +171,9 @@ services:
       # MIGO FIT 官方网站（独立仓库 fitcoach-website 部署的静态站，root /）
       # 维护：bash shell/deploy-website.sh （首次 init / 后续直接 pull）
       - ${WEBSITE_DIR:-/data/fitcoach/website}:/usr/share/nginx/website:ro
+      # certbot webroot 验证目录（自动续期时用，certbot 把验证文件写到宿主机目录，
+      # nginx 通过 /.well-known/acme-challenge/ 提供给 Let's Encrypt 服务器验证）
+      - ${CERTBOT_WEBROOT:-/data/fitcoach/certbot}:/usr/share/nginx/certbot:ro
     depends_on:
       app:
         condition: service_healthy

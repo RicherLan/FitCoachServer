@@ -46,6 +46,7 @@
 │    /data/fitcoach/uploads     用户上传文件          │
 │    /data/fitcoach/logs        应用日志              │
 │    /data/fitcoach/certs       SSL 证书              │
+│    /data/fitcoach/certbot    certbot 验证目录       │
 └──────────────────────────────────────────────────┘
 ```
 
@@ -102,7 +103,7 @@ docker compose version
 ### 2.4 创建数据目录
 
 ```bash
-sudo mkdir -p /data/fitcoach/{mysql,uploads,logs,certs}
+sudo mkdir -p /data/fitcoach/{mysql,uploads,logs,certs,certbot}
 sudo chown -R $USER:$USER /data/fitcoach
 ```
 
@@ -252,74 +253,114 @@ docker image prune -a    # 删所有未使用镜像（小心！会删 mysql/ngin
 
 ## 5. HTTPS 证书配置
 
-强烈建议上线就配 HTTPS。**Let's Encrypt 免费，自动续期**。
+使用 **Let's Encrypt** 免费证书 + **certbot** 自动续期。
+
+**整体思路**：
+- **首次申请**：certbot standalone 模式（需临时停 nginx 释放 80 端口）
+- **自动续期**：certbot webroot 模式（不停服务，nginx 配置已预留验证路径）
 
 ### 5.1 域名解析
 
-去腾讯云 DNSPod 控制台确认 A 记录已生效：
+去腾讯云 DNSPod 控制台确认两条 A 记录都已生效：
 ```
-migofitai.com    →    1.14.174.249
+migofitai.com      →    1.14.174.249
+www.migofitai.com  →    1.14.174.249
 ```
 
 验证：
 ```bash
 dig +short migofitai.com
-# 应返回 1.14.174.249
+dig +short www.migofitai.com
+# 都应返回 1.14.174.249
 ```
 
-### 5.2 申请证书
+⚠️ **腾讯云控制台「安全组」确保已放行 443/TCP**（80 之前已开）。
+
+### 5.2 首次申请证书
 
 ```bash
-# 1. 临时停 nginx（certbot standalone 模式要占 80 端口验证）
+# 0. 创建 certbot webroot 目录（续期时用）
+sudo mkdir -p /data/fitcoach/certbot
+
+# 1. 安装 certbot（宿主机上，不是 Docker 里）
+sudo apt install -y certbot
+
+# 2. 临时停 nginx 容器（certbot standalone 要占 80 端口做域名验证）
+cd /opt/fitcoach/FitCoachServer
 docker compose -f shell/docker-compose.prod.yml --env-file .env.prod stop nginx
 
-# 2. 安装 certbot 并申请（交互时输入邮箱、同意条款即可）
-sudo apt install -y certbot
-sudo certbot certonly --standalone -d migofitai.com
+# 3. 申请证书（两个域名一起申请，交互时输入邮箱、同意条款）
+sudo certbot certonly --standalone \
+    -d migofitai.com \
+    -d www.migofitai.com
 
-# 3. 证书会生成在 /etc/letsencrypt/live/migofitai.com/
+# 4. 验证证书已生成
 sudo ls /etc/letsencrypt/live/migofitai.com/
-# fullchain.pem  privkey.pem  ...
+# 应看到: fullchain.pem  privkey.pem  cert.pem  chain.pem  README
 
-# 4. 拷贝到 Docker 挂载的 certs 目录
+# 5. 拷贝到 Docker 挂载的 certs 目录
 sudo cp /etc/letsencrypt/live/migofitai.com/fullchain.pem /data/fitcoach/certs/
 sudo cp /etc/letsencrypt/live/migofitai.com/privkey.pem /data/fitcoach/certs/
 sudo chmod 644 /data/fitcoach/certs/*.pem
 ```
 
-### 5.3 启用 HTTPS
+### 5.3 部署并验证
 
-`nginx/fitcoach.conf` 已预配好 HTTPS（HTTP 80 自动 301 跳转到 HTTPS 443）。
-
-只需重新部署即可生效：
 ```bash
+# 拉最新代码（包含 HTTPS nginx 配置）并部署
+git pull
 bash shell/deploy.sh
-```
-
-或只重启 nginx：
-```bash
-docker compose -f shell/docker-compose.prod.yml --env-file .env.prod start nginx
 ```
 
 验证：
 ```bash
 # HTTPS 应正常返回
 curl https://migofitai.com/api/auth/ping
+# {"code":0,"message":"ok","data":"pong"}
 
-# HTTP 应返回 301 跳转
+# HTTP 应 301 跳转到 HTTPS
 curl -I http://migofitai.com
-# 应看到: HTTP/1.1 301 Moved Permanently
+# HTTP/1.1 301 Moved Permanently
+# Location: https://migofitai.com/
+
+# www 应 301 跳转到裸域
+curl -I https://www.migofitai.com
+# HTTP/1.1 301 Moved Permanently
 # Location: https://migofitai.com/
 ```
 
 ### 5.4 自动续期
 
-Let's Encrypt 证书 90 天有效，配 cron 自动续（每月 1 号凌晨 2 点）：
+Let's Encrypt 证书 90 天有效。配置 certbot **webroot 模式**自动续期（不停服务）。
+
+首先修改 certbot 的续期配置，把 standalone 改为 webroot：
+```bash
+# 编辑续期配置文件
+sudo vim /etc/letsencrypt/renewal/migofitai.com.conf
+
+# 找到 authenticator = standalone，改为：
+#   authenticator = webroot
+#
+# 在 [webroot] 段加上（没有就新建）：
+#   [[webroot]]
+#   migofitai.com = /data/fitcoach/certbot
+#   www.migofitai.com = /data/fitcoach/certbot
+```
+
+然后测试续期（dry-run 不会真续）：
+```bash
+sudo certbot renew --dry-run
+# 应看到: Congratulations, all simulations were successful
+```
+
+最后配 cron 自动续期（每月 1 号和 15 号凌晨 2 点）：
 ```bash
 crontab -e
-# 加：
-0 2 1 * * docker compose -f /opt/fitcoach/FitCoachServer/shell/docker-compose.prod.yml --env-file /opt/fitcoach/FitCoachServer/.env.prod stop nginx && sudo certbot renew --quiet && sudo cp /etc/letsencrypt/live/migofitai.com/fullchain.pem /data/fitcoach/certs/ && sudo cp /etc/letsencrypt/live/migofitai.com/privkey.pem /data/fitcoach/certs/ && docker compose -f /opt/fitcoach/FitCoachServer/shell/docker-compose.prod.yml --env-file /opt/fitcoach/FitCoachServer/.env.prod start nginx
+# 加入以下行：
+0 2 1,15 * * sudo certbot renew --quiet && sudo cp /etc/letsencrypt/live/migofitai.com/fullchain.pem /data/fitcoach/certs/ && sudo cp /etc/letsencrypt/live/migofitai.com/privkey.pem /data/fitcoach/certs/ && docker exec fitcoach-nginx-prod nginx -s reload
 ```
+
+> **说明**：续期后 `docker exec nginx -s reload` 热加载新证书，**零中断**。
 
 ---
 
