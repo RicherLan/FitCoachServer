@@ -1,5 +1,6 @@
 package com.lanprojects.fitcoach.payment.repository;
 
+import com.lanprojects.fitcoach.common.client.AppFlavor;
 import com.lanprojects.fitcoach.payment.entity.OrderStatus;
 import com.lanprojects.fitcoach.payment.entity.PaymentChannel;
 import com.lanprojects.fitcoach.payment.entity.PaymentOrder;
@@ -27,6 +28,23 @@ public interface PaymentOrderRepository extends JpaRepository<PaymentOrder, Long
 
     /** Admin 按状态筛选 */
     Page<PaymentOrder> findByStatusOrderByCreatedAtDesc(OrderStatus status, Pageable pageable);
+
+    /**
+     * Admin 按 flavor 筛选（阶段 4 波 2）。传 {@code null} 会用 IS NULL 匹配 —— 但 Spring Data 派生方法
+     * 不支持 null 参数自动转 IS NULL，所以 null 场景由 Service 层显式走 {@link #findByAppFlavorIsNullOrderByCreatedAtDesc}。
+     */
+    Page<PaymentOrder> findByAppFlavorOrderByCreatedAtDesc(AppFlavor appFlavor, Pageable pageable);
+
+    /** Admin 查"未标注 flavor"（历史订单 / Postman / 老客户端）的订单 */
+    Page<PaymentOrder> findByAppFlavorIsNullOrderByCreatedAtDesc(Pageable pageable);
+
+    /** Admin 按状态 + flavor 双条件筛选 */
+    Page<PaymentOrder> findByStatusAndAppFlavorOrderByCreatedAtDesc(
+            OrderStatus status, AppFlavor appFlavor, Pageable pageable);
+
+    /** Admin 按状态 + flavor=NULL 双条件筛选 */
+    Page<PaymentOrder> findByStatusAndAppFlavorIsNullOrderByCreatedAtDesc(
+            OrderStatus status, Pageable pageable);
 
     /**
      * 待清理的过期未支付订单（用于定时任务关闭超时订单）。

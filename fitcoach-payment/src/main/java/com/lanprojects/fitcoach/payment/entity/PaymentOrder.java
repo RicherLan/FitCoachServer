@@ -1,5 +1,6 @@
 package com.lanprojects.fitcoach.payment.entity;
 
+import com.lanprojects.fitcoach.common.client.AppFlavor;
 import com.lanprojects.fitcoach.common.entity.BaseEntity;
 import jakarta.persistence.*;
 import lombok.Getter;
@@ -32,7 +33,8 @@ import java.time.LocalDateTime;
         @Index(name = "uk_payment_order_id", columnList = "order_id", unique = true),
         @Index(name = "idx_payment_order_user", columnList = "user_id"),
         @Index(name = "idx_payment_order_status", columnList = "status"),
-        @Index(name = "idx_payment_order_channel_txn", columnList = "channel_transaction_id")
+        @Index(name = "idx_payment_order_channel_txn", columnList = "channel_transaction_id"),
+        @Index(name = "idx_payment_order_flavor", columnList = "app_flavor")
 })
 public class PaymentOrder extends BaseEntity {
 
@@ -70,6 +72,24 @@ public class PaymentOrder extends BaseEntity {
      */
     @Column(name = "client_platform", length = 16)
     private String clientPlatform;
+
+    /**
+     * 下单时的 App Flavor（{@code CN} / {@code GLOBAL}），从 {@code X-App-Flavor} header 解析后落盘。
+     *
+     * <p><b>为什么和 {@code client_platform} 分开</b>：Platform 是"iOS/Android 系统"，Flavor 是"CN/GLOBAL 市场包"，
+     * 二者维度独立（举例：一台 Android 设备可能装 CN 包也可能装 GLOBAL 包），必须都落盘才能：
+     * <ul>
+     *   <li>Admin 报表按市场拆分 GMV（CN 微信 vs GLOBAL IAP）；</li>
+     *   <li>财务对账把 CNY / USD 金额按市场归集；</li>
+     *   <li>合规审计能证明"该订单是 CN 包用户下的，且走的是 CN 允许的通道"（阶段 4 波 1 已在下单时校验）。</li>
+     * </ul>
+     *
+     * <p><b>可空</b>：非 RN 客户端（admin 手工造单 / Postman 联调 / 老版本客户端）不带 header，字段为 {@code null}。
+     * 查询侧按需 filter null（Admin 筛选传 "UNKNOWN" 时应查 null 记录）。
+     */
+    @Enumerated(EnumType.STRING)
+    @Column(name = "app_flavor", length = 16)
+    private AppFlavor appFlavor;
 
     /**
      * 实付金额（最小货币单位，分/美分）。下单时根据 channel 决定币种：

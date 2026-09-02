@@ -2,6 +2,7 @@ package com.lanprojects.fitcoach.payment.service;
 
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.lanprojects.fitcoach.common.client.AppFlavor;
 import com.lanprojects.fitcoach.common.event.PaymentSucceededEvent;
 import com.lanprojects.fitcoach.common.exception.BusinessException;
 import com.lanprojects.fitcoach.common.model.ResultCode;
@@ -110,12 +111,14 @@ public class PaymentService {
         order.setPlanSnapshotName(plan.displayName());
         order.setChannel(channel);
         order.setClientPlatform(cmd.clientPlatform());
+        // 阶段 4 波 2：落 app_flavor 便于 Admin 按市场筛单 / 财务报表按市场归集 GMV
+        order.setAppFlavor(cmd.appFlavor());
         order.setAmountCents(amountCents);
         order.setCurrency(currency);
         order.setStatus(OrderStatus.PENDING);
         order = orderRepository.save(order);
-        log.info("[payment] 创建订单 orderId={} userId={} planCode={} channel={} amountCents={} currency={}",
-                orderId, cmd.userId(), plan.planCode(), channel, amountCents, currency);
+        log.info("[payment] 创建订单 orderId={} userId={} planCode={} channel={} amountCents={} currency={} flavor={}",
+                orderId, cmd.userId(), plan.planCode(), channel, amountCents, currency, cmd.appFlavor());
 
         // 4. 调 Provider 创建通道侧订单
         CreateOrderRequest req = new CreateOrderRequest(
@@ -311,6 +314,27 @@ public class PaymentService {
 
     public Page<PaymentOrder> adminListByStatus(OrderStatus status, Pageable pageable) {
         return orderRepository.findByStatusOrderByCreatedAtDesc(status, pageable);
+    }
+
+    /**
+     * Admin 按 flavor 筛选订单（阶段 4 波 2）。
+     *
+     * @param appFlavor {@code CN} / {@code GLOBAL}；传 {@code null} 表示查"未标注 flavor"
+     *                  （历史订单 / Postman / 老客户端下单）
+     */
+    public Page<PaymentOrder> adminListByFlavor(AppFlavor appFlavor, Pageable pageable) {
+        return appFlavor == null
+                ? orderRepository.findByAppFlavorIsNullOrderByCreatedAtDesc(pageable)
+                : orderRepository.findByAppFlavorOrderByCreatedAtDesc(appFlavor, pageable);
+    }
+
+    /**
+     * Admin 按状态 + flavor 双条件筛选订单。flavor 为 null 时走 IS NULL 分支。
+     */
+    public Page<PaymentOrder> adminListByStatusAndFlavor(OrderStatus status, AppFlavor appFlavor, Pageable pageable) {
+        return appFlavor == null
+                ? orderRepository.findByStatusAndAppFlavorIsNullOrderByCreatedAtDesc(status, pageable)
+                : orderRepository.findByStatusAndAppFlavorOrderByCreatedAtDesc(status, appFlavor, pageable);
     }
 
     // ====== 内部 ======

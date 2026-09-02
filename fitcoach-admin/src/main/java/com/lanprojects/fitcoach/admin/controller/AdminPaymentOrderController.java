@@ -6,6 +6,7 @@ import com.lanprojects.fitcoach.admin.dto.PageResponse;
 import com.lanprojects.fitcoach.admin.dto.payment.AdminPaymentOrderDto;
 import com.lanprojects.fitcoach.admin.dto.payment.AdminRefundRequest;
 import com.lanprojects.fitcoach.admin.security.AdminAuthInterceptor;
+import com.lanprojects.fitcoach.common.client.AppFlavor;
 import com.lanprojects.fitcoach.common.exception.BusinessException;
 import com.lanprojects.fitcoach.common.model.Result;
 import com.lanprojects.fitcoach.common.model.ResultCode;
@@ -40,7 +41,7 @@ import java.util.stream.Collectors;
  *
  * <p>路径前缀：/api/admin/payment/orders
  * <ul>
- *   <li>{@code GET /} —— 分页列表，可按 status 过滤</li>
+ *   <li>{@code GET /} —— 分页列表，可按 status / flavor 过滤（flavor 阶段 4 波 2 新增，见 {@link #parseFlavorFilter}）</li>
  *   <li>{@code GET /{orderId}} —— 详情</li>
  *   <li>{@code POST /{orderId}/refund} —— 标记退款（V1 仅记账，钱原路退由财务线下处理）</li>
  * </ul>
@@ -61,24 +62,29 @@ public class AdminPaymentOrderController {
     private final UserRepository userRepository;
     private final AdminAuditLogService auditLogService;
 
-    /** 订单分页（按创建时间倒序）。可选 status 过滤 */
+    /**
+     * 订单分页（按创建时间倒序）。可选 status / flavor 过滤。
+     *
+     * <p><b>flavor 参数取值</b>：
+     * <ul>
+     *   <li>{@code CN} —— 只看国内包下的订单；</li>
+     *   <li>{@code GLOBAL} —— 只看海外包下的订单；</li>
+     *   <li>{@code UNKNOWN} —— 只看 app_flavor 为 null 的历史订单 / Postman 手工造单；</li>
+     *   <li>缺省 —— 全量。</li>
+     * </ul>
+     */
     @GetMapping
     public Result<PageResponse<AdminPaymentOrderDto>> list(
             @RequestParam(value = "page", defaultValue = "1") int page,
             @RequestParam(value = "size", defaultValue = "20") int size,
-            @RequestParam(value = "status", required = false) String status) {
+            @RequestParam(value = "status", required = false) String status,
+            @RequestParam(value = "flavor", required = false) String flavor) {
         // 1-based → 0-based
         int p = Math.max(page, 1) - 1;
         int s = Math.min(Math.max(size, 1), 100);
         Pageable pageable = PageRequest.of(p, s);
 
-        Page<PaymentOrder> orderPage;
-        if (status != null && !status.isBlank()) {
-            OrderStatus st = parseStatus(status);
-            orderPage = paymentService.adminListByStatus(st, pageable);
-        } else {
-            orderPage = paymentService.adminList(pageable);
-        }
+        Page<PaymentOrder> orderPage = queryOrders(status, flavor, pageable);
 
         // join user 信息（少量 user，单次 in 查询）
         Map<Long, User> userMap = batchLoadUsers(orderPage.getContent());
@@ -133,27 +139,24 @@ public class AdminPaymentOrderController {
      */
     @GetMapping("/export")
     public void exportCsv(HttpServletRequest request, HttpServletResponse response,
-                          @RequestParam(value = "status", required = false) String status) throws IOException {
+                          @RequestParam(value = "status", required = false) String status,
+                          @RequestParam(value = "flavor", required = false) String flavor) throws IOException {
         Pageable pageable = PageRequest.of(0, MAX_EXPORT_SIZE,
                 org.springframework.data.domain.Sort.by(org.springframework.data.domain.Sort.Direction.DESC, "createdAt"));
-        Page<PaymentOrder> orderPage;
-        if (status != null && !status.isBlank()) {
-            OrderStatus st = parseStatus(status);
-            orderPage = paymentService.adminListByStatus(st, pageable);
-        } else {
-            orderPage = paymentService.adminList(pageable);
-        }
+        Page<PaymentOrder> orderPage = queryOrders(status, flavor, pageable);
         List<PaymentOrder> orders = orderPage.getContent();
         Map<Long, User> userMap = batchLoadUsers(orders);
 
         String operator = (String) request.getAttribute(AdminAuthInterceptor.ATTR_ADMIN_USERNAME);
         auditLogService.logSuccess(request, AdminAuditAction.EXPORT_ORDERS, "ORDER", null,
-                "rows=" + orders.size() + ", status=" + status);
-        log.info("导出支付订单 CSV, operator={}, rows={}, status={}", operator, orders.size(), status);
+                "rows=" + orders.size() + ", status=" + status + ", flavor=" + flavor);
+        log.info("导出支付订单 CSV, operator={}, rows={}, status={}, flavor={}",
+                operator, orders.size(), status, flavor);
 
+        // 阶段 4 波 2：CSV 表头追加"市场"列，便于财务按 CN / GLOBAL 拆 GMV
         CsvHttpResponseUtil.write(response, "orders",
                 List.of("订单号", "用户 uid", "用户昵称", "套餐", "金额(元)", "币种", "状态", "退款状态", "退款金额(元)",
-                        "通道", "客户端", "通道单号", "创建时间", "支付时间", "退款时间", "失败原因"),
+                        "通道", "市场", "客户端", "通道单号", "创建时间", "支付时间", "退款时间", "失败原因"),
                 orders, o -> {
                     User u = userMap.get(o.getUserId());
                     return List.of(
@@ -167,6 +170,7 @@ public class AdminPaymentOrderController {
                             o.getRefundStatus() == null ? "" : o.getRefundStatus().name(),
                             centsToYuan(o.getRefundAmountCents()),
                             o.getChannel() == null ? "" : o.getChannel().name(),
+                            o.getAppFlavor() == null ? "" : o.getAppFlavor().name(),
                             nullToEmpty(o.getClientPlatform()),
                             nullToEmpty(o.getChannelTransactionId()),
                             fmtIso(o.getCreatedAt()),
@@ -179,11 +183,56 @@ public class AdminPaymentOrderController {
 
     // ====== 内部 ======
 
+    /**
+     * list / exportCsv 共用的查询编排（阶段 4 波 2）—— 收敛 (status × flavor) 4 种组合的分派逻辑。
+     *
+     * <p>四象限：
+     * <ol>
+     *   <li>status 非空 + flavor 非空/UNKNOWN → {@code adminListByStatusAndFlavor}</li>
+     *   <li>status 非空 + flavor 缺省       → {@code adminListByStatus}</li>
+     *   <li>status 缺省  + flavor 非空/UNKNOWN → {@code adminListByFlavor}</li>
+     *   <li>status 缺省  + flavor 缺省       → {@code adminList}</li>
+     * </ol>
+     */
+    private Page<PaymentOrder> queryOrders(String status, String flavor, Pageable pageable) {
+        boolean hasStatus = status != null && !status.isBlank();
+        boolean hasFlavor = flavor != null && !flavor.isBlank();
+
+        if (hasStatus && hasFlavor) {
+            return paymentService.adminListByStatusAndFlavor(parseStatus(status), parseFlavorFilter(flavor), pageable);
+        } else if (hasStatus) {
+            return paymentService.adminListByStatus(parseStatus(status), pageable);
+        } else if (hasFlavor) {
+            return paymentService.adminListByFlavor(parseFlavorFilter(flavor), pageable);
+        } else {
+            return paymentService.adminList(pageable);
+        }
+    }
+
     private OrderStatus parseStatus(String raw) {
         try {
             return OrderStatus.valueOf(raw.trim().toUpperCase());
         } catch (IllegalArgumentException e) {
             throw new BusinessException(ResultCode.BAD_REQUEST, "status 参数不合法：" + raw);
+        }
+    }
+
+    /**
+     * 解析 flavor 筛选参数（阶段 4 波 2）：
+     * <ul>
+     *   <li>"CN" / "GLOBAL" → 对应枚举；</li>
+     *   <li>"UNKNOWN" → 返回 {@code null} 匹配 app_flavor IS NULL；</li>
+     *   <li>其他 → 400 参数不合法。</li>
+     * </ul>
+     */
+    private AppFlavor parseFlavorFilter(String raw) {
+        String v = raw.trim().toUpperCase();
+        if ("UNKNOWN".equals(v)) return null;
+        try {
+            return AppFlavor.valueOf(v);
+        } catch (IllegalArgumentException e) {
+            throw new BusinessException(ResultCode.BAD_REQUEST,
+                    "flavor 参数不合法：" + raw + "（合法值：CN / GLOBAL / UNKNOWN）");
         }
     }
 

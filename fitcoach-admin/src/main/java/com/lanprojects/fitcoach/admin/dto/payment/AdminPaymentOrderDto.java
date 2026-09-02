@@ -1,5 +1,6 @@
 package com.lanprojects.fitcoach.admin.dto.payment;
 
+import com.lanprojects.fitcoach.common.client.AppFlavor;
 import com.lanprojects.fitcoach.payment.entity.OrderStatus;
 import com.lanprojects.fitcoach.payment.entity.PaymentChannel;
 import com.lanprojects.fitcoach.payment.entity.PaymentOrder;
@@ -25,6 +26,8 @@ public class AdminPaymentOrderDto {
     private String planSnapshotName;
     private PaymentChannel channel;
     private String clientPlatform;
+    /** 下单时的 App Flavor（CN / GLOBAL / null=未标注），阶段 4 波 2 新增 */
+    private AppFlavor appFlavor;
     private Integer amountCents;
     private String currency;
     private OrderStatus status;
@@ -47,6 +50,7 @@ public class AdminPaymentOrderDto {
                 .planSnapshotName(o.getPlanSnapshotName())
                 .channel(o.getChannel())
                 .clientPlatform(o.getClientPlatform())
+                .appFlavor(o.getAppFlavor())
                 .amountCents(o.getAmountCents())
                 .currency(o.getCurrency())
                 .status(o.getStatus())
