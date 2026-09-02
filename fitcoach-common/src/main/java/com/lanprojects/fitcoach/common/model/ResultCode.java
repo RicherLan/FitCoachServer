@@ -72,6 +72,19 @@ public enum ResultCode {
      */
     APPLE_CONFIG_MISSING(2102, "Apple 登录配置缺失，请联系管理员", "apple.config_missing"),
 
+    // ====== Google Sign In 2201-2299（阶段 3B 波 2） ======
+    /**
+     * Google idToken 验签失败 —— 由 {@code GoogleTokenVerifier} 抛出。
+     * <p>触发场景：JWK 签名校验不通过 / iss 不是 Google / aud 不在允许列表 / exp 已过 / sub 缺失 / 结构损坏。
+     * <p>安全策略：不对客户端暴露具体失败原因。
+     */
+    GOOGLE_TOKEN_INVALID(2201, "Google 登录凭证无效", "google.token_invalid"),
+    /**
+     * Google 登录配置缺失 —— 由 {@code GoogleService} 抛出。
+     * <p>触发场景：{@code google_login.enabled} 未开启 / {@code google_login.client_ids} 未配置或为空。
+     */
+    GOOGLE_CONFIG_MISSING(2202, "Google 登录配置缺失，请联系管理员", "google.config_missing"),
+
     // ====== 用户相关 3xxx ======
     USER_NOT_FOUND(3001, "用户不存在", "user.not_found"),
     USER_DISABLED(3002, "账号已被禁用", "user.disabled"),

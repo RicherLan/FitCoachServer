@@ -25,7 +25,9 @@ import java.time.LocalDateTime;
         // 都最终落到一行 user 上；admin 后台、客服查询、未来好友搜索均以 account 为入口
         @Index(name = "uk_account", columnList = "account", unique = true),
         // 阶段 3B 波 1：Apple Sign In 用户唯一标识（identityToken.sub），unique 保证并发登录不重复建号
-        @Index(name = "uk_apple_sub", columnList = "apple_sub", unique = true)
+        @Index(name = "uk_apple_sub", columnList = "apple_sub", unique = true),
+        // 阶段 3B 波 2：Google Sign In 用户唯一标识（idToken.sub），unique 保证并发登录不重复建号
+        @Index(name = "uk_google_sub", columnList = "google_sub", unique = true)
 })
 public class User extends BaseEntity {
 
@@ -178,6 +180,40 @@ public class User extends BaseEntity {
      */
     @Column(name = "apple_full_name", length = 200)
     private String appleFullName;
+
+    // ====== 三方登录字段（阶段 3B 波 2：Google Sign In） ======
+
+    /**
+     * Google Sign In 用户唯一标识 —— idToken.sub，Google 保证同一 OAuth Client（或同一 project）
+     * 下对同一 Google 账号返回一致的 sub，且 sub 不会跨 project 复用。
+     * <p>unique 约束在 {@link Table#indexes()} 声明为 {@code uk_google_sub}；
+     * NULL 允许并存，非 Google 用户此列为 null。
+     * <p><b>写入时机</b>：{@code AuthService#findOrCreateByGoogle} 首次登录时写入，后续登录不变更。
+     * <p><b>与 Apple 的差异</b>：Google idToken 每次登录都会返回 email / name / picture，
+     * 因此不像 Apple 那样必须首次持久化；本字段更像 openId 定位符。
+     */
+    @Column(name = "google_sub", length = 100)
+    private String googleSub;
+
+    /**
+     * Google Sign In 首次登录时保存的邮箱 —— 与 {@link #email} 的语义区分同 {@link #appleEmail}：
+     * <ul>
+     *   <li>{@link #email}：用户在"账号设置"里绑定的联系邮箱（可编辑）；</li>
+     *   <li>{@link #googleEmail}：Google 授权时返回的原始邮箱（用于追溯，不可变）。</li>
+     * </ul>
+     * <p>Google idToken 每次登录都返回 email，理论上可动态刷新；但为保持与 {@link #appleEmail}
+     * 一致的"三方原始邮箱"语义，仍只在首次登录写入，后续登录不覆盖。
+     */
+    @Column(name = "google_email", length = 200)
+    private String googleEmail;
+
+    /**
+     * Google Sign In 首次登录时保存的显示名（idToken.name）。
+     * <p>用户首次注册时若客户端未额外指定 nickname，则以此字段值作为默认昵称；
+     * 后续登录不覆盖用户在应用内自行修改过的 {@link #nickname}。
+     */
+    @Column(name = "google_name", length = 200)
+    private String googleName;
 
     /**
      * 密码哈希（BCrypt 60 字符固定长度）。

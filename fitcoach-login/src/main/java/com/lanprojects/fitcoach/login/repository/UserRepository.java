@@ -34,6 +34,9 @@ public interface UserRepository
      */
     Optional<User> findByAppleSub(String appleSub);
 
+    /** 阶段 3B 波 2：按 Google Sub 查找用户。 */
+    Optional<User> findByGoogleSub(String googleSub);
+
     boolean existsByOpenId(String openId);
 
     boolean existsByAccount(String account);

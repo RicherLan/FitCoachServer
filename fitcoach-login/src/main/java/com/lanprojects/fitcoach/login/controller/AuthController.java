@@ -6,6 +6,7 @@ import com.lanprojects.fitcoach.common.model.ResultCode;
 import com.lanprojects.fitcoach.common.security.ClientIpResolver;
 import com.lanprojects.fitcoach.login.dto.AccountLoginRequest;
 import com.lanprojects.fitcoach.login.dto.AppleLoginRequest;
+import com.lanprojects.fitcoach.login.dto.GoogleLoginRequest;
 import com.lanprojects.fitcoach.login.dto.LoginResponse;
 import com.lanprojects.fitcoach.login.dto.PasswordLoginRequest;
 import com.lanprojects.fitcoach.login.dto.PhoneLoginRequest;
@@ -56,6 +57,22 @@ public class AuthController {
         // Flavor 白名单校验：仅 CN flavor / null（老客户端/admin/Postman）放行
         FlavorLoginPolicy.ensureAllowed(User.LoginType.WECHAT);
         return Result.success(authService.wechatLogin(request.getCode()));
+    }
+
+    /**
+     * Google Sign In 登录（阶段 3B 波 2）
+     * <p>POST /api/auth/google/login
+     * <br>Body: { "idToken": "...", "nonce": "..." }
+     *
+     * <p><b>flavor 白名单</b>：GLOBAL_METHODS 已含 GOOGLE，CN 不允许（法规不支持 Google 服务）。
+     *
+     * <p><b>安全</b>：idToken 校验走 {@code GoogleService → GoogleTokenVerifier}，
+     * 用 Nimbus JOSE JWT + RemoteJWKSet（自动缓存 Google 公钥）+ 校验 iss/aud/exp/sub。
+     */
+    @PostMapping("/google/login")
+    public Result<LoginResponse> googleLogin(@Valid @RequestBody GoogleLoginRequest request) {
+        FlavorLoginPolicy.ensureAllowed(User.LoginType.GOOGLE);
+        return Result.success(authService.googleLogin(request));
     }
 
     /**

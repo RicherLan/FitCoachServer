@@ -8,6 +8,8 @@ import com.lanprojects.fitcoach.common.upload.UploadProperties;
 import com.lanprojects.fitcoach.common.util.LogUtils;
 import com.lanprojects.fitcoach.login.dto.AppleIdTokenPayload;
 import com.lanprojects.fitcoach.login.dto.AppleLoginRequest;
+import com.lanprojects.fitcoach.login.dto.GoogleIdTokenPayload;
+import com.lanprojects.fitcoach.login.dto.GoogleLoginRequest;
 import com.lanprojects.fitcoach.login.dto.LoginResponse;
 import com.lanprojects.fitcoach.login.dto.WeChatTokenResponse;
 import com.lanprojects.fitcoach.login.dto.WeChatUserInfo;
@@ -55,6 +57,7 @@ public class AuthService {
 
     private final WeChatService weChatService;
     private final AppleService appleService;
+    private final GoogleService googleService;
     private final UserRepository userRepository;
     private final SysConfigService sysConfigService;
     private final UploadProperties uploadProperties;
@@ -122,6 +125,27 @@ public class AuthService {
         User user = findOrCreateByApple(payload, request);
 
         log.info("Apple 登录成功, uid={}, appleSubMask={}", user.getUid(), LogUtils.mask(payload.sub()));
+        return buildLoginResponse(user);
+    }
+
+    /**
+     * Google Sign In 登录（阶段 3B 波 2）。
+     * <p>流程：
+     * <ol>
+     *   <li>{@link GoogleService#verifyIdToken(String)} 拉 Google JWK 验签 + 校验 iss/aud/exp 并解析 sub/email/name/picture；</li>
+     *   <li>按 sub 查找或创建 user，首次登录时把 email/name/picture 持久化；</li>
+     *   <li>颁发 access + refresh token 并 rotate sessionId。</li>
+     * </ol>
+     * <p><b>与 Apple 的差异</b>：Google idToken 每次登录都返回完整用户信息，客户端不需要额外传 email/name。
+     */
+    @Transactional
+    public LoginResponse googleLogin(GoogleLoginRequest request) {
+        log.info("Google 登录开始");
+
+        GoogleIdTokenPayload payload = googleService.verifyIdToken(request.getIdToken());
+        User user = findOrCreateByGoogle(payload);
+
+        log.info("Google 登录成功, uid={}, googleSubMask={}", user.getUid(), LogUtils.mask(payload.sub()));
         return buildLoginResponse(user);
     }
 
@@ -435,6 +459,65 @@ public class AuthService {
      *   <li>appleSub 作为唯一索引 uk_apple_sub 保底并发 —— 冲突时回退按 sub 再查。</li>
      * </ul>
      */
+    /**
+     * 按 Google sub 查找或创建用户（阶段 3B 波 2）。
+     * <p>Google 特点：
+     * <ul>
+     *   <li>每次登录都能拿到 email / name / picture，不像 Apple 只在首次授权时返回；</li>
+     *   <li>但为保持"三方原始信息"的审计语义，本方法仍只在首次注册时写入
+     *       {@code googleEmail} / {@code googleName}，二次登录不覆盖；</li>
+     *   <li>{@code googleSub} 作为唯一索引 uk_google_sub 保底并发 —— 冲突时回退按 sub 再查。</li>
+     * </ul>
+     * <p>头像逻辑：Google 的 picture 是外网 URL（lh3.googleusercontent.com/...），
+     * 首次注册直接落到 {@code avatarUrl}；后续登录不覆盖（用户可能已经上传自定义头像）。
+     */
+    private User findOrCreateByGoogle(GoogleIdTokenPayload payload) {
+        String sub = payload.sub();
+        Optional<User> existing = userRepository.findByGoogleSub(sub);
+        if (existing.isPresent()) {
+            User user = existing.get();
+            log.info("Google 老用户登录, uid={}, googleSubMask={}", user.getUid(), LogUtils.mask(sub));
+            user.setLoginType(User.LoginType.GOOGLE);
+            user.setLastLoginAt(LocalDateTime.now());
+            if (user.getAccount() == null || user.getAccount().isBlank()) {
+                user.setAccount(accountGenerator.generateUnique());
+            }
+            // 老用户登录时不覆盖 email / name / avatar —— 保持用户在应用内的自定义修改
+            return userRepository.save(user);
+        }
+
+        log.info("Google 新用户注册, googleSubMask={}, hasEmail={}, hasName={}",
+                LogUtils.mask(sub), payload.hasEmail(), payload.hasName());
+
+        User newUser = new User();
+        newUser.setUid(UUID.randomUUID().toString().replace("-", ""));
+        newUser.setAccount(accountGenerator.generateUnique());
+        // 首次注册的 nickname 优先取 idToken 的 name；无 name 兜底 "Google 用户"
+        String nickname = payload.hasName() ? payload.name().trim() : "Google 用户";
+        if (nickname.length() > 20) {
+            nickname = nickname.substring(0, 20);
+        }
+        newUser.setNickname(nickname);
+        // 优先用 Google 返回的头像 URL，无则走默认头像
+        newUser.setAvatarUrl(resolveAvatarUrl(payload.hasPicture() ? payload.picture() : null));
+        newUser.setLoginType(User.LoginType.GOOGLE);
+        newUser.setRegistrationSource(User.RegistrationSource.GOOGLE);
+        newUser.setRegisterFlavor(ClientContext.appFlavor());
+        newUser.setGoogleSub(sub);
+        newUser.setGoogleEmail(payload.hasEmail() ? payload.email() : null);
+        newUser.setGoogleName(payload.hasName() ? payload.name() : null);
+        newUser.setGender(0);
+        newUser.setLastLoginAt(LocalDateTime.now());
+
+        try {
+            return userRepository.save(newUser);
+        } catch (DataIntegrityViolationException e) {
+            log.warn("并发创建 Google 用户冲突，回退按 googleSub 查询, subMask={}", LogUtils.mask(sub));
+            return userRepository.findByGoogleSub(sub)
+                    .orElseThrow(() -> new BusinessException(ResultCode.ERROR, "用户创建失败，请重试"));
+        }
+    }
+
     private User findOrCreateByApple(AppleIdTokenPayload payload, AppleLoginRequest request) {
         String sub = payload.sub();
         Optional<User> existing = userRepository.findByAppleSub(sub);
