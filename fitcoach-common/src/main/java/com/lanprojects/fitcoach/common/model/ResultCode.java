@@ -42,6 +42,15 @@ public enum ResultCode {
      * user.currentSessionId，因此 admin 后台 / Postman 等无 deviceId 的调试场景不会被互踢。
      */
     SESSION_KICKED(1006, "账号已在其他设备登录", "auth.session_kicked"),
+    /**
+     * Flavor × LoginMethod 白名单校验拒绝 —— 由
+     * {@link com.lanprojects.fitcoach.common.client.FlavorLoginPolicy#ensureAllowed} 抛出。
+     * <p>触发链路：客户端请求头 {@code X-App-Flavor} 与目标登录端点不匹配
+     * （如 CN 包尝试调 /api/auth/google/login，或 GLOBAL 包尝试调 /api/auth/wechat/login）。
+     * <p>正常客户端因 UI 层已按 flavorProfile 过滤按钮不会触发；此码主要用于
+     * 防御 curl / 篡改客户端 / 绕过 UI 的越权请求。
+     */
+    LOGIN_METHOD_NOT_ALLOWED(1007, "当前 App 版本不支持该登录方式", "auth.login_method_not_allowed"),
 
     // ====== 微信登录 2xxx ======
     WECHAT_CODE_INVALID(2001, "微信授权码无效", "wechat.code_invalid"),
