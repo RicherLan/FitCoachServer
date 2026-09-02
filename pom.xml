@@ -42,6 +42,9 @@
         <hutool.version>5.8.26</hutool.version>
         <caffeine.version>3.1.8</caffeine.version>
         <tencentcloud.version>3.1.1064</tencentcloud.version>
+        <!-- Nimbus JOSE JWT：Apple / Google idToken 校验（JWK 公钥下载 + 签名验证 + audience 校验）；
+             jjwt-* 只用于我们自己签发的 HS256 token，与三方 RS256 idToken 校验能力互不重叠。 -->
+        <nimbus.jose.jwt.version>9.40</nimbus.jose.jwt.version>
         <!-- springdoc-openapi 2.5.x 适配 Spring Boot 3.2.x；2.6+ 需要 Boot 3.3 -->
         <springdoc.version>2.5.0</springdoc.version>
     </properties>
@@ -132,6 +135,16 @@
                 <artifactId>jjwt-jackson</artifactId>
                 <version>${jjwt.version}</version>
                 <scope>runtime</scope>
+            </dependency>
+
+            <!-- Nimbus JOSE JWT：三方 OIDC idToken 校验（Apple / Google Sign-In）
+                 - 自带 RemoteJWKSet + 内置公钥缓存，避免每次登录都拉取 apple/google 公钥；
+                 - 覆盖 RS256 / ES256 等三方常见签名算法；
+                 - 与 jjwt-* 定位不重叠：jjwt-* 是我们自己签发的 HS256 access/refresh token。 -->
+            <dependency>
+                <groupId>com.nimbusds</groupId>
+                <artifactId>nimbus-jose-jwt</artifactId>
+                <version>${nimbus.jose.jwt.version}</version>
             </dependency>
 
             <!-- Hutool 工具库 -->

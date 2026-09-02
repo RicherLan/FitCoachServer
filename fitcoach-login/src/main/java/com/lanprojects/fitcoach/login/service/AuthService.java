@@ -6,6 +6,8 @@ import com.lanprojects.fitcoach.common.exception.BusinessException;
 import com.lanprojects.fitcoach.common.model.ResultCode;
 import com.lanprojects.fitcoach.common.upload.UploadProperties;
 import com.lanprojects.fitcoach.common.util.LogUtils;
+import com.lanprojects.fitcoach.login.dto.AppleIdTokenPayload;
+import com.lanprojects.fitcoach.login.dto.AppleLoginRequest;
 import com.lanprojects.fitcoach.login.dto.LoginResponse;
 import com.lanprojects.fitcoach.login.dto.WeChatTokenResponse;
 import com.lanprojects.fitcoach.login.dto.WeChatUserInfo;
@@ -52,6 +54,7 @@ public class AuthService {
     private static final int DEFAULT_REFRESH_EXPIRE_HOURS = 168;
 
     private final WeChatService weChatService;
+    private final AppleService appleService;
     private final UserRepository userRepository;
     private final SysConfigService sysConfigService;
     private final UploadProperties uploadProperties;
@@ -96,6 +99,29 @@ public class AuthService {
     public LoginResponse phoneLogin(String phone) {
         User user = findOrCreateByPhone(phone);
         log.info("手机号登录成功, uid={}, phone={}", user.getUid(), LogUtils.mask(phone));
+        return buildLoginResponse(user);
+    }
+
+    /**
+     * Apple Sign In 登录（阶段 3B 波 1）。
+     * <p>流程：
+     * <ol>
+     *   <li>{@link AppleService#verifyIdentityToken(String)} 拉 Apple JWK 验签 + 校验 iss/aud/exp 并解析 sub/email；</li>
+     *   <li>按 sub 查找或创建 user，首次登录时把 email/fullName 持久化（Apple 只在首次授权时返回）；</li>
+     *   <li>颁发 access + refresh token 并 rotate sessionId。</li>
+     * </ol>
+     * <p><b>关键 Apple 特性</b>：identityToken 内的 sub 是"该 App（Team）下的用户终身唯一 ID"，
+     * 用作我们本地 user 的三方账户关联主键；跨 App / Team 的同一 Apple ID 会得到不同的 sub。
+     */
+    @Transactional
+    public LoginResponse appleLogin(AppleLoginRequest request) {
+        log.info("Apple 登录开始, hasEmail={}, hasFullName={}",
+                request.getEmail() != null, request.getFullName() != null);
+
+        AppleIdTokenPayload payload = appleService.verifyIdentityToken(request.getIdentityToken());
+        User user = findOrCreateByApple(payload, request);
+
+        log.info("Apple 登录成功, uid={}, appleSubMask={}", user.getUid(), LogUtils.mask(payload.sub()));
         return buildLoginResponse(user);
     }
 
@@ -394,6 +420,76 @@ public class AuthService {
         } catch (DataIntegrityViolationException e) {
             log.warn("并发创建手机号用户冲突，回退按 phone 查询, phone={}", LogUtils.mask(phone));
             return userRepository.findByPhone(phone)
+                    .orElseThrow(() -> new BusinessException(ResultCode.ERROR, "用户创建失败，请重试"));
+        }
+    }
+
+    /**
+     * 按 Apple sub 查找或创建用户（阶段 3B 波 1）。
+     * <p>Apple 特有语义：
+     * <ul>
+     *   <li>email / fullName 只在首次授权时返回，**后续登录 payload 内可能全为 null**，
+     *       此时严禁覆盖已存字段（否则用户改过昵称会被抹掉）；</li>
+     *   <li>用户可勾选"隐藏姓名"或"隐藏邮箱" → fullName / email 首次也可能为 null；
+     *       此时 nickname 走 "Apple 用户" 兜底、appleEmail 落 null；</li>
+     *   <li>appleSub 作为唯一索引 uk_apple_sub 保底并发 —— 冲突时回退按 sub 再查。</li>
+     * </ul>
+     */
+    private User findOrCreateByApple(AppleIdTokenPayload payload, AppleLoginRequest request) {
+        String sub = payload.sub();
+        Optional<User> existing = userRepository.findByAppleSub(sub);
+        if (existing.isPresent()) {
+            User user = existing.get();
+            log.info("Apple 老用户登录, uid={}, appleSubMask={}", user.getUid(), LogUtils.mask(sub));
+            user.setLoginType(User.LoginType.APPLE);
+            user.setLastLoginAt(LocalDateTime.now());
+            // 兜底补 account（DataInitializer migration 之后新用户不应触发此分支）
+            if (user.getAccount() == null || user.getAccount().isBlank()) {
+                user.setAccount(accountGenerator.generateUnique());
+            }
+            // 老用户登录时不覆盖 email / fullName —— Apple 后续登录本就不带这些字段，
+            // 已存值可能是用户在设置里改过的，不能反向覆盖。
+            return userRepository.save(user);
+        }
+
+        log.info("Apple 新用户注册, appleSubMask={}, hasEmail={}, hasFullName={}",
+                LogUtils.mask(sub), payload.hasEmail() || (request.getEmail() != null),
+                request.getFullName() != null);
+
+        User newUser = new User();
+        newUser.setUid(UUID.randomUUID().toString().replace("-", ""));
+        newUser.setAccount(accountGenerator.generateUnique());
+        // 首次注册的 nickname 优先取客户端传入的 fullName（Apple SDK 会拼接 given+family），
+        // 无 fullName 兜底为 "Apple 用户"
+        String nickname = (request.getFullName() != null && !request.getFullName().isBlank())
+                ? request.getFullName().trim()
+                : "Apple 用户";
+        // 上限 20 字符（对齐 profile.nickname 校验规则），超长截断
+        if (nickname.length() > 20) {
+            nickname = nickname.substring(0, 20);
+        }
+        newUser.setNickname(nickname);
+        // Apple 不返回头像 → 直接用 server 配置的默认头像
+        newUser.setAvatarUrl(resolveAvatarUrl(null));
+        newUser.setLoginType(User.LoginType.APPLE);
+        newUser.setRegistrationSource(User.RegistrationSource.APPLE);
+        // 首次注册时锁定 App Flavor（阶段 2 多市场基建）
+        newUser.setRegisterFlavor(ClientContext.appFlavor());
+        newUser.setAppleSub(sub);
+        // 邮箱优先取 identityToken 里解析出的 email（更可信），兜底用 request.email（客户端 SDK 首次返回）
+        String appleEmail = payload.hasEmail() ? payload.email() :
+                (request.getEmail() != null && !request.getEmail().isBlank() ? request.getEmail().trim() : null);
+        newUser.setAppleEmail(appleEmail);
+        newUser.setAppleFullName(request.getFullName());
+        newUser.setGender(0);
+        newUser.setLastLoginAt(LocalDateTime.now());
+
+        try {
+            return userRepository.save(newUser);
+        } catch (DataIntegrityViolationException e) {
+            // 并发：另一个请求刚好把同 sub 的用户先建了；回退按 appleSub 重新查
+            log.warn("并发创建 Apple 用户冲突，回退按 appleSub 查询, subMask={}", LogUtils.mask(sub));
+            return userRepository.findByAppleSub(sub)
                     .orElseThrow(() -> new BusinessException(ResultCode.ERROR, "用户创建失败，请重试"));
         }
     }

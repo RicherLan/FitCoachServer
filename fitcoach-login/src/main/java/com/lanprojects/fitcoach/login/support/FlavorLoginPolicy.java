@@ -39,10 +39,10 @@ import java.util.Set;
  *   <tr><td>GLOBAL</td><td>['google','apple','email']</td><td>{@link #GLOBAL_METHODS} + ACCOUNT</td></tr>
  * </table>
  *
- * <p><b>注意</b>：RN {@code CN_PROFILE.loginMethods} 里之所以列了 apple，
- * 是因为"CN iOS 包在 App Store 上架也需要提供 Apple 登录以满足审核要求"。
- * 但这一点的开关权由 client 侧 Platform.OS 二次过滤控制，服务端本层不需要为
- * "CN + APPLE" 单独放行 —— 待阶段 3B 实际接入 Apple 登录时再评估是否需要调整此白名单。
+ * <p><b>阶段 3B 更新</b>：CN 白名单已加入 {@link User.LoginType#APPLE}。
+ * <br>动因：App Store Guideline 4.8 —— CN iOS 包上架也必须支持 Apple 登录且入口权重不低于其他方案，
+ * 是硬性上架要求。虽然 Platform.OS 二次过滤在 RN 侧屏蔽了 Android+APPLE 的入口，
+ * 但服务端仍需在 CN flavor 下放行 APPLE 以支持 CN iOS 用户走 Apple Sign In。
  *
  * <h3>{@link User.LoginType#ACCOUNT} 是全 flavor 通用的例外</h3>
  * account（用户号）+ 密码 是 user 的内在唯一凭证，任何注册方式首次登录后 server 都会
@@ -63,10 +63,12 @@ public final class FlavorLoginPolicy {
      * CN flavor 允许的登录方式白名单（不含全 flavor 通用的 ACCOUNT）。
      * <p>与 RN {@code flavorProfile.ts#CN_PROFILE.loginMethods} 保持同步；
      * 增删项时两端必须同时改动。
+     * <p>APPLE 是 CN iOS 上架 App Store 的硬性要求（Guideline 4.8）。
      */
     private static final Set<User.LoginType> CN_METHODS = EnumSet.of(
             User.LoginType.WECHAT,
-            User.LoginType.PHONE);
+            User.LoginType.PHONE,
+            User.LoginType.APPLE);
 
     /**
      * GLOBAL flavor 允许的登录方式白名单（不含全 flavor 通用的 ACCOUNT）。

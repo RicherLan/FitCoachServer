@@ -54,10 +54,23 @@ public enum ResultCode {
      */
     LOGIN_METHOD_NOT_ALLOWED(1007, "当前 App 版本不支持该登录方式", "auth.login_method_not_allowed"),
 
-    // ====== 微信登录 2xxx ======
+    // ====== 微信登录 2001-2099 ======
     WECHAT_CODE_INVALID(2001, "微信授权码无效", "wechat.code_invalid"),
     WECHAT_API_ERROR(2002, "微信接口调用失败", "wechat.api_error"),
     WECHAT_CONFIG_MISSING(2003, "微信配置缺失，请联系管理员", "wechat.config_missing"),
+
+    // ====== Apple Sign In 2101-2199（阶段 3B 波 1） ======
+    /**
+     * Apple identityToken 验签失败 —— 由 {@code AppleTokenVerifier} 抛出。
+     * <p>触发场景：JWK 签名校验不通过 / iss 不是 Apple / aud 不在允许列表 / exp 已过 / sub 缺失 / 结构损坏。
+     * <p>安全策略：不对客户端暴露具体失败原因（防止攻击者按提示逐项调整）。
+     */
+    APPLE_TOKEN_INVALID(2101, "Apple 登录凭证无效", "apple.token_invalid"),
+    /**
+     * Apple 登录配置缺失 —— 由 {@code AppleService} 抛出。
+     * <p>触发场景：{@code apple_login.enabled} 未开启 / {@code apple_login.client_ids} 未配置或为空。
+     */
+    APPLE_CONFIG_MISSING(2102, "Apple 登录配置缺失，请联系管理员", "apple.config_missing"),
 
     // ====== 用户相关 3xxx ======
     USER_NOT_FOUND(3001, "用户不存在", "user.not_found"),

@@ -23,7 +23,9 @@ import java.time.LocalDateTime;
         @Index(name = "uk_phone", columnList = "phone", unique = true),
         // account：用户的内在唯一标识（类似小红书号），所有登录方式（微信/手机/Google/Apple/账号密码）
         // 都最终落到一行 user 上；admin 后台、客服查询、未来好友搜索均以 account 为入口
-        @Index(name = "uk_account", columnList = "account", unique = true)
+        @Index(name = "uk_account", columnList = "account", unique = true),
+        // 阶段 3B 波 1：Apple Sign In 用户唯一标识（identityToken.sub），unique 保证并发登录不重复建号
+        @Index(name = "uk_apple_sub", columnList = "apple_sub", unique = true)
 })
 public class User extends BaseEntity {
 
@@ -140,6 +142,42 @@ public class User extends BaseEntity {
      */
     @Column(name = "email", length = 100)
     private String email;
+
+    // ====== 三方登录字段（阶段 3B 波 1：Apple Sign In） ======
+
+    /**
+     * Apple Sign In 用户唯一标识 —— identityToken.sub，Apple 保证同一 App（同 Team）下终身不变。
+     * <p>unique 约束在 {@link Table#indexes()} 声明为 {@code uk_apple_sub}；
+     * NULL 允许并存（MySQL unique 索引对 NULL 不去重），非 Apple 用户此列为 null。
+     * <p><b>写入时机</b>：{@code AuthService#findOrCreateByApple} 首次登录时写入，
+     * 后续登录不变更。
+     */
+    @Column(name = "apple_sub", length = 100)
+    private String appleSub;
+
+    /**
+     * Apple Sign In 首次授权返回的邮箱 —— Apple 只在**首次同意授权**时返回 email/fullName，
+     * 后续登录 identityToken 不再携带这些字段。因此本字段必须在首次登录时持久化，
+     * 服务端不能依赖每次登录都能拿到它。
+     * <p>可能是用户真实邮箱，也可能是 Apple 隐藏邮箱转发地址（形如 xxx@privaterelay.appleid.com）。
+     * <p>与 {@link #email} 字段的区别：
+     * <ul>
+     *   <li>{@link #email}：用户在"账号设置"里绑定的联系邮箱（可编辑）；</li>
+     *   <li>{@link #appleEmail}：Apple 授权时返回的原始邮箱（不可变，仅审计追溯）。</li>
+     * </ul>
+     * 两者相互独立，允许并存。
+     */
+    @Column(name = "apple_email", length = 200)
+    private String appleEmail;
+
+    /**
+     * Apple Sign In 首次授权返回的全名（"given family" 拼接后的字符串），可为 null。
+     * <p>与 {@link #appleEmail} 同样只在首次授权时可获得，之后不再返回。
+     * <p>用户在 Apple 授权页勾选"隐藏姓名"时，该字段为 null；此时首次注册的 nickname 走
+     * 兜底逻辑（"Apple 用户"）。
+     */
+    @Column(name = "apple_full_name", length = 200)
+    private String appleFullName;
 
     /**
      * 密码哈希（BCrypt 60 字符固定长度）。

@@ -35,6 +35,18 @@
             <artifactId>jjwt-jackson</artifactId>
         </dependency>
 
+        <!--
+            Nimbus JOSE JWT —— 三方 OIDC idToken 校验专用（阶段 3B）：
+              - Apple identityToken：RS256 签名 + iss=https://appleid.apple.com + audience=Bundle ID；
+              - Google idToken：RS256 签名 + iss=https://accounts.google.com + audience=OAuth Client ID。
+            自带 RemoteJWKSet 内置公钥缓存 + 5min 拉取 + 24h 兜底，不重复造轮子。
+            与 jjwt-* 定位不重叠：jjwt-* 仅用于我们自签的 HS256 access/refresh token。
+        -->
+        <dependency>
+            <groupId>com.nimbusds</groupId>
+            <artifactId>nimbus-jose-jwt</artifactId>
+        </dependency>
+
         <!-- HTTP Client (调用微信 API) -->
         <dependency>
             <groupId>cn.hutool</groupId>

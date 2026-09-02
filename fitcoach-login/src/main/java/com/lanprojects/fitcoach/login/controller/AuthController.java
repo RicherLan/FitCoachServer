@@ -5,6 +5,7 @@ import com.lanprojects.fitcoach.common.model.Result;
 import com.lanprojects.fitcoach.common.model.ResultCode;
 import com.lanprojects.fitcoach.common.security.ClientIpResolver;
 import com.lanprojects.fitcoach.login.dto.AccountLoginRequest;
+import com.lanprojects.fitcoach.login.dto.AppleLoginRequest;
 import com.lanprojects.fitcoach.login.dto.LoginResponse;
 import com.lanprojects.fitcoach.login.dto.PasswordLoginRequest;
 import com.lanprojects.fitcoach.login.dto.PhoneLoginRequest;
@@ -55,6 +56,23 @@ public class AuthController {
         // Flavor 白名单校验：仅 CN flavor / null（老客户端/admin/Postman）放行
         FlavorLoginPolicy.ensureAllowed(User.LoginType.WECHAT);
         return Result.success(authService.wechatLogin(request.getCode()));
+    }
+
+    /**
+     * Apple Sign In 登录（阶段 3B 波 1）
+     * <p>POST /api/auth/apple/login
+     * <br>Body: { "identityToken": "...", "email": "...(首次授权可能带)", "fullName": "...(首次授权可能带)", "nonce": "..." }
+     *
+     * <p><b>合规要点</b>：CN iOS 上架 App Store 要求（Guideline 4.8）—— 若 App 提供第三方登录，
+     * 必须同时提供 Apple 登录且入口权重不低于其他方案。因此 {@link FlavorLoginPolicy} 的 CN_METHODS 包含 APPLE。
+     *
+     * <p><b>安全</b>：identityToken 校验走 {@code AppleService → AppleTokenVerifier}，
+     * 用 Nimbus JOSE JWT + RemoteJWKSet（自动缓存 Apple 公钥）+ 校验 iss/aud/exp/sub。
+     */
+    @PostMapping("/apple/login")
+    public Result<LoginResponse> appleLogin(@Valid @RequestBody AppleLoginRequest request) {
+        FlavorLoginPolicy.ensureAllowed(User.LoginType.APPLE);
+        return Result.success(authService.appleLogin(request));
     }
 
     /**

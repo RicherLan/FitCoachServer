@@ -28,6 +28,12 @@ public interface UserRepository
 
     Optional<User> findByAccount(String account);
 
+    /**
+     * 阶段 3B 波 1：按 Apple Sub 查找用户。
+     * <p>identityToken.sub 由 Apple 保证同一 App（同 Team）终身不变，是 findOrCreateByApple 的主查询键。
+     */
+    Optional<User> findByAppleSub(String appleSub);
+
     boolean existsByOpenId(String openId);
 
     boolean existsByAccount(String account);
