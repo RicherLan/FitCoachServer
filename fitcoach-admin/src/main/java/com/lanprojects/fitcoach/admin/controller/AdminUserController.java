@@ -10,6 +10,7 @@ import com.lanprojects.fitcoach.admin.dto.UserDetailDto;
 import com.lanprojects.fitcoach.admin.dto.UserSummaryDto;
 import com.lanprojects.fitcoach.admin.security.AdminAuthInterceptor;
 import com.lanprojects.fitcoach.admin.service.AdminUserService;
+import com.lanprojects.fitcoach.common.client.AppFlavor;
 import com.lanprojects.fitcoach.common.exception.BusinessException;
 import com.lanprojects.fitcoach.common.model.Result;
 import com.lanprojects.fitcoach.common.model.ResultCode;
@@ -66,6 +67,7 @@ public class AdminUserController {
      * @param keyword   昵称 / phone / uid 关键字模糊匹配，可选
      * @param enabled   启用状态过滤，可选
      * @param loginType 登录方式过滤（WECHAT/PHONE/...），可选
+     * @param flavor    注册市场过滤（CN / GLOBAL / UNKNOWN），可选。UNKNOWN 表示筛选老用户 register_flavor IS NULL
      */
     @GetMapping
     public Result<PageResponse<UserSummaryDto>> list(
@@ -73,9 +75,11 @@ public class AdminUserController {
             @RequestParam(value = "size", defaultValue = "20") int size,
             @RequestParam(value = "keyword", required = false) String keyword,
             @RequestParam(value = "enabled", required = false) Boolean enabled,
-            @RequestParam(value = "loginType", required = false) String loginType) {
+            @RequestParam(value = "loginType", required = false) String loginType,
+            @RequestParam(value = "flavor", required = false) String flavor) {
         User.LoginType lt = parseLoginType(loginType);
-        return Result.success(adminUserService.listUsers(page, size, keyword, enabled, lt));
+        FlavorFilter ff = parseFlavorFilter(flavor);
+        return Result.success(adminUserService.listUsers(page, size, keyword, enabled, lt, ff.flavor, ff.isNull));
     }
 
     /** 用户详情 */
@@ -159,23 +163,29 @@ public class AdminUserController {
     public void exportCsv(HttpServletRequest request, HttpServletResponse response,
                           @RequestParam(value = "keyword", required = false) String keyword,
                           @RequestParam(value = "enabled", required = false) Boolean enabled,
-                          @RequestParam(value = "loginType", required = false) String loginType) throws IOException {
+                          @RequestParam(value = "loginType", required = false) String loginType,
+                          @RequestParam(value = "flavor", required = false) String flavor) throws IOException {
         User.LoginType lt = parseLoginType(loginType);
-        List<User> users = adminUserService.exportUsers(keyword, enabled, lt);
+        FlavorFilter ff = parseFlavorFilter(flavor);
+        List<User> users = adminUserService.exportUsers(keyword, enabled, lt, ff.flavor, ff.isNull);
 
         String operator = (String) request.getAttribute(AdminAuthInterceptor.ATTR_ADMIN_USERNAME);
         auditLogService.logSuccess(request, AdminAuditAction.EXPORT_USERS, "USER", null,
-                "rows=" + users.size() + ", keyword=" + keyword + ", enabled=" + enabled + ", loginType=" + loginType);
-        log.info("导出用户 CSV, operator={}, rows={}", operator, users.size());
+                "rows=" + users.size() + ", keyword=" + keyword + ", enabled=" + enabled
+                        + ", loginType=" + loginType + ", flavor=" + flavor);
+        log.info("导出用户 CSV, operator={}, rows={}, flavor={}", operator, users.size(), flavor);
 
+        // 阶段 6 波 1：CSV 表头新增"注册市场"列
         CsvHttpResponseUtil.write(response, "users",
-                List.of("uid", "account", "昵称", "最近登录方式", "注册来源", "性别", "手机号", "启用", "注册时间", "最后登录时间", "最后活跃时间"),
+                List.of("uid", "account", "昵称", "最近登录方式", "注册来源", "注册市场", "性别", "手机号", "启用",
+                        "注册时间", "最后登录时间", "最后活跃时间"),
                 users, u -> List.of(
                         nullToEmpty(u.getUid()),
                         nullToEmpty(u.getAccount()),
                         nullToEmpty(u.getNickname()),
                         u.getLoginType() == null ? "" : u.getLoginType().name(),
                         u.getRegistrationSource() == null ? "" : u.getRegistrationSource().name(),
+                        u.getRegisterFlavor() == null ? "" : u.getRegisterFlavor().name(),
                         u.getGender() == null ? "" : String.valueOf(u.getGender()),
                         maskPhone(u.getPhone()),
                         u.getEnabled() == null ? "" : (u.getEnabled() ? "是" : "否"),
@@ -194,6 +204,36 @@ public class AdminUserController {
         } catch (IllegalArgumentException e) {
             throw new BusinessException(ResultCode.BAD_REQUEST, "loginType 参数不合法：" + raw);
         }
+    }
+
+    /**
+     * 解析 flavor 筛选参数（阶段 6 波 1）：
+     * <ul>
+     *   <li>null / 空 → 不过滤（{@code flavor=null, isNull=false}）；</li>
+     *   <li>"CN" / "GLOBAL" → 对应 AppFlavor（{@code isNull=false}）；</li>
+     *   <li>"UNKNOWN" → 筛选 register_flavor IS NULL 的老用户（{@code flavor=null, isNull=true}）；</li>
+     *   <li>其他 → 400 参数不合法。</li>
+     * </ul>
+     */
+    private FlavorFilter parseFlavorFilter(String raw) {
+        if (raw == null || raw.isBlank()) return FlavorFilter.NONE;
+        String v = raw.trim().toUpperCase();
+        if ("UNKNOWN".equals(v)) return FlavorFilter.NULL;
+        try {
+            return new FlavorFilter(AppFlavor.valueOf(v), false);
+        } catch (IllegalArgumentException e) {
+            throw new BusinessException(ResultCode.BAD_REQUEST,
+                    "flavor 参数不合法：" + raw + "（合法值：CN / GLOBAL / UNKNOWN）");
+        }
+    }
+
+    /**
+     * 三态 flavor 过滤器：{@code flavor} 非空表示 EQUAL；{@code isNull=true} 表示 IS NULL；
+     * 二者均为默认值表示不过滤。
+     */
+    private record FlavorFilter(AppFlavor flavor, boolean isNull) {
+        static final FlavorFilter NONE = new FlavorFilter(null, false);
+        static final FlavorFilter NULL = new FlavorFilter(null, true);
     }
 
     private static String nullToEmpty(String s) {

@@ -1,5 +1,6 @@
 package com.lanprojects.fitcoach.login.repository;
 
+import com.lanprojects.fitcoach.common.client.AppFlavor;
 import com.lanprojects.fitcoach.login.entity.User;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.JpaSpecificationExecutor;
@@ -36,4 +37,10 @@ public interface UserRepository
 
     /** 后台 Dashboard：按启用状态统计 */
     long countByEnabled(Boolean enabled);
+
+    /** 后台 Dashboard：按注册 flavor 分组统计（阶段 6 波 1） */
+    long countByRegisterFlavor(AppFlavor registerFlavor);
+
+    /** 后台 Dashboard：统计 register_flavor 为空的用户（老用户 / 非 RN 客户端注册） */
+    long countByRegisterFlavorIsNull();
 }

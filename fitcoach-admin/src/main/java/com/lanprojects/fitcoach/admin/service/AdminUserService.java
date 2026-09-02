@@ -6,6 +6,7 @@ import com.lanprojects.fitcoach.admin.dto.ResetUserPasswordRequest;
 import com.lanprojects.fitcoach.admin.dto.UpdateUserStatusRequest;
 import com.lanprojects.fitcoach.admin.dto.UserDetailDto;
 import com.lanprojects.fitcoach.admin.dto.UserSummaryDto;
+import com.lanprojects.fitcoach.common.client.AppFlavor;
 import com.lanprojects.fitcoach.common.exception.BusinessException;
 import com.lanprojects.fitcoach.common.model.ResultCode;
 import com.lanprojects.fitcoach.feedback.repository.UserFeedbackRepository;
@@ -58,16 +59,19 @@ public class AdminUserService {
     /**
      * 分页查询用户列表
      *
-     * @param keyword   按昵称 / phone / uid 模糊匹配（OR 关系）
-     * @param enabled   按启用状态过滤；null 表示不过滤
-     * @param loginType 登录方式过滤；null 表示不过滤
+     * @param keyword       按昵称 / phone / uid 模糊匹配（OR 关系）
+     * @param enabled       按启用状态过滤；null 表示不过滤
+     * @param loginType     登录方式过滤；null 表示不过滤
+     * @param flavor        注册 flavor 过滤（阶段 6 波 1）；null 且 flavorIsNull=false 表示不过滤
+     * @param flavorIsNull  显式筛选 register_flavor 为 NULL 的历史用户（Admin 前端 flavor=UNKNOWN 映射到此）
      */
     public PageResponse<UserSummaryDto> listUsers(int page, int size, String keyword,
-                                                  Boolean enabled, User.LoginType loginType) {
+                                                  Boolean enabled, User.LoginType loginType,
+                                                  AppFlavor flavor, boolean flavorIsNull) {
         int safeSize = Math.min(Math.max(size, 1), MAX_PAGE_SIZE);
         int safePage = Math.max(page, 1) - 1;  // 入参 1-based → Spring 0-based
 
-        Page<User> p = userRepository.findAll(buildSpec(keyword, enabled, loginType),
+        Page<User> p = userRepository.findAll(buildSpec(keyword, enabled, loginType, flavor, flavorIsNull),
                 PageRequest.of(safePage, safeSize, Sort.by(Sort.Direction.DESC, "createdAt")));
         return PageResponse.from(p, u -> UserSummaryDto.from(
                 u, adminUrlService.resolve(u.getAvatarUrl()), maskPhone(u.getPhone())));
@@ -79,14 +83,25 @@ public class AdminUserService {
      * 超过上限的部分由调用方提示用户继续按更细条件筛选后再导。
      * <p>返回 entity 而非 DTO —— 让 controller 决定脱敏 / 字段顺序 / 表头文案。
      */
-    public List<User> exportUsers(String keyword, Boolean enabled, User.LoginType loginType) {
-        Page<User> p = userRepository.findAll(buildSpec(keyword, enabled, loginType),
+    public List<User> exportUsers(String keyword, Boolean enabled, User.LoginType loginType,
+                                  AppFlavor flavor, boolean flavorIsNull) {
+        Page<User> p = userRepository.findAll(buildSpec(keyword, enabled, loginType, flavor, flavorIsNull),
                 PageRequest.of(0, MAX_EXPORT_SIZE, Sort.by(Sort.Direction.DESC, "createdAt")));
         return p.getContent();
     }
 
-    /** 列表 / 导出共用的 Spec：keyword 对 nickname/phone/uid/account 做模糊匹配。 */
-    private Specification<User> buildSpec(String keyword, Boolean enabled, User.LoginType loginType) {
+    /**
+     * 列表 / 导出共用的 Spec：keyword 对 nickname/phone/uid/account 做模糊匹配。
+     *
+     * <p><b>flavor 三态语义</b>（阶段 6 波 1）：
+     * <ol>
+     *   <li>{@code flavorIsNull=false, flavor=null} → 不过滤（全量）；</li>
+     *   <li>{@code flavorIsNull=false, flavor=CN/GLOBAL} → EQUAL 过滤；</li>
+     *   <li>{@code flavorIsNull=true}                     → IS NULL 过滤（"未标注 flavor"的老用户）。</li>
+     * </ol>
+     */
+    private Specification<User> buildSpec(String keyword, Boolean enabled, User.LoginType loginType,
+                                          AppFlavor flavor, boolean flavorIsNull) {
         return (root, query, cb) -> {
             List<Predicate> ps = new ArrayList<>();
             if (keyword != null && !keyword.isBlank()) {
@@ -103,6 +118,11 @@ public class AdminUserService {
             }
             if (loginType != null) {
                 ps.add(cb.equal(root.get("loginType"), loginType));
+            }
+            if (flavorIsNull) {
+                ps.add(cb.isNull(root.get("registerFlavor")));
+            } else if (flavor != null) {
+                ps.add(cb.equal(root.get("registerFlavor"), flavor));
             }
             return ps.isEmpty() ? cb.conjunction() : cb.and(ps.toArray(new Predicate[0]));
         };

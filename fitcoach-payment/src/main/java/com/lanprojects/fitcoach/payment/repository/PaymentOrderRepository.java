@@ -46,6 +46,26 @@ public interface PaymentOrderRepository extends JpaRepository<PaymentOrder, Long
     Page<PaymentOrder> findByStatusAndAppFlavorIsNullOrderByCreatedAtDesc(
             OrderStatus status, Pageable pageable);
 
+    // ==================== 阶段 6 波 1 Dashboard flavor 聚合 ====================
+    // 说明：GMV 采用"分（cents）"存储，跨币种（CNY / USD 等）不做 FX 汇率换算，
+    //      前端按 flavor 分别展示单位即可（CN → ￥、GLOBAL → $）。
+
+    /** 按状态 + flavor 统计订单数（Dashboard 已支付订单分组） */
+    long countByStatusAndAppFlavor(OrderStatus status, AppFlavor appFlavor);
+
+    /** 按状态 + flavor=NULL 统计订单数（历史未标注 flavor 的订单） */
+    long countByStatusAndAppFlavorIsNull(OrderStatus status);
+
+    /** 按状态 + flavor 求和金额（分），用于 Dashboard GMV 卡片；无匹配记录时返回 0 */
+    @Query("SELECT COALESCE(SUM(o.amountCents), 0) FROM PaymentOrder o "
+            + "WHERE o.status = :status AND o.appFlavor = :flavor")
+    long sumAmountCentsByStatusAndAppFlavor(OrderStatus status, AppFlavor flavor);
+
+    /** 按状态 + flavor=NULL 求和金额（分）；无匹配记录时返回 0 */
+    @Query("SELECT COALESCE(SUM(o.amountCents), 0) FROM PaymentOrder o "
+            + "WHERE o.status = :status AND o.appFlavor IS NULL")
+    long sumAmountCentsByStatusAndAppFlavorIsNull(OrderStatus status);
+
     /**
      * 待清理的过期未支付订单（用于定时任务关闭超时订单）。
      * 当前没用到 Pageable，限制由调用方 chunk 处理。

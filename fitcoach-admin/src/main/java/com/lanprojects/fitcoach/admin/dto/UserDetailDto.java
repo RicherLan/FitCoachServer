@@ -21,6 +21,10 @@ public class UserDetailDto {
     private String loginType;
     /** 注册来源（首次创建该 user 时的渠道），与 loginType 不同，本字段永不变更 */
     private String registrationSource;
+    /**
+     * 首次注册的 App Flavor（CN / GLOBAL / null=未标注），阶段 6 波 1 新增。
+     */
+    private String registerFlavor;
     /** 是否设置过登录密码（C 端用户「账号安全 → 设置密码」） */
     private Boolean passwordSet;
     private Integer gender;
@@ -47,6 +51,7 @@ public class UserDetailDto {
                 .avatarUrl(avatarUrlAbsolute)
                 .loginType(user.getLoginType() == null ? null : user.getLoginType().name())
                 .registrationSource(user.getRegistrationSource() == null ? null : user.getRegistrationSource().name())
+                .registerFlavor(user.getRegisterFlavor() == null ? null : user.getRegisterFlavor().name())
                 .passwordSet(user.getPasswordHash() != null && !user.getPasswordHash().isBlank())
                 .gender(user.getGender())
                 .phone(user.getPhone())

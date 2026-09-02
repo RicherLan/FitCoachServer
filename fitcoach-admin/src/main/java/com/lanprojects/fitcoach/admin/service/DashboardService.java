@@ -2,10 +2,13 @@ package com.lanprojects.fitcoach.admin.service;
 
 import com.lanprojects.fitcoach.admin.dto.DashboardOverviewDto;
 import com.lanprojects.fitcoach.common.cache.CacheNames;
+import com.lanprojects.fitcoach.common.client.AppFlavor;
 import com.lanprojects.fitcoach.feedback.entity.FeedbackStatus;
 import com.lanprojects.fitcoach.feedback.entity.FeedbackType;
 import com.lanprojects.fitcoach.feedback.repository.UserFeedbackRepository;
 import com.lanprojects.fitcoach.login.repository.UserRepository;
+import com.lanprojects.fitcoach.payment.entity.OrderStatus;
+import com.lanprojects.fitcoach.payment.repository.PaymentOrderRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.cache.annotation.Cacheable;
@@ -35,8 +38,14 @@ public class DashboardService {
 
     private final UserRepository userRepository;
     private final UserFeedbackRepository userFeedbackRepository;
+    private final PaymentOrderRepository paymentOrderRepository;
 
-    /** 拉取概览数据（用户 + 反馈）— Caffeine 缓存 30s */
+    /** 阶段 6 波 1 flavor 分组 key 常量：Server / Admin / SDK 保持一致 */
+    private static final String FLAVOR_KEY_CN = "CN";
+    private static final String FLAVOR_KEY_GLOBAL = "GLOBAL";
+    private static final String FLAVOR_KEY_UNKNOWN = "UNKNOWN";
+
+    /** 拉取概览数据（用户 + 反馈 + 阶段 6 波 1 flavor 分组）— Caffeine 缓存 30s */
     @Cacheable(value = CacheNames.ADMIN_DASHBOARD_OVERVIEW, key = "'overview'")
     public DashboardOverviewDto getOverview() {
         LocalDateTime now = LocalDateTime.now();
@@ -62,6 +71,30 @@ public class DashboardService {
             byType.put(t.name(), userFeedbackRepository.countByType(t));
         }
 
+        // ==================== 阶段 6 波 1 flavor 分组 ====================
+        // 3 个 Map 都固定 CN → GLOBAL → UNKNOWN 顺序，前端 Object.entries 遍历渲染即可。
+        // 用户 & 已支付订单 & GMV 三条线各 3 次查库，总共 9 个 SQL；缓存 30s 期间共享，压力可控。
+        Map<String, Long> usersByFlavor = new LinkedHashMap<>();
+        usersByFlavor.put(FLAVOR_KEY_CN, userRepository.countByRegisterFlavor(AppFlavor.CN));
+        usersByFlavor.put(FLAVOR_KEY_GLOBAL, userRepository.countByRegisterFlavor(AppFlavor.GLOBAL));
+        usersByFlavor.put(FLAVOR_KEY_UNKNOWN, userRepository.countByRegisterFlavorIsNull());
+
+        Map<String, Long> paidOrdersByFlavor = new LinkedHashMap<>();
+        paidOrdersByFlavor.put(FLAVOR_KEY_CN,
+                paymentOrderRepository.countByStatusAndAppFlavor(OrderStatus.PAID, AppFlavor.CN));
+        paidOrdersByFlavor.put(FLAVOR_KEY_GLOBAL,
+                paymentOrderRepository.countByStatusAndAppFlavor(OrderStatus.PAID, AppFlavor.GLOBAL));
+        paidOrdersByFlavor.put(FLAVOR_KEY_UNKNOWN,
+                paymentOrderRepository.countByStatusAndAppFlavorIsNull(OrderStatus.PAID));
+
+        Map<String, Long> gmvCentsByFlavor = new LinkedHashMap<>();
+        gmvCentsByFlavor.put(FLAVOR_KEY_CN,
+                paymentOrderRepository.sumAmountCentsByStatusAndAppFlavor(OrderStatus.PAID, AppFlavor.CN));
+        gmvCentsByFlavor.put(FLAVOR_KEY_GLOBAL,
+                paymentOrderRepository.sumAmountCentsByStatusAndAppFlavor(OrderStatus.PAID, AppFlavor.GLOBAL));
+        gmvCentsByFlavor.put(FLAVOR_KEY_UNKNOWN,
+                paymentOrderRepository.sumAmountCentsByStatusAndAppFlavorIsNull(OrderStatus.PAID));
+
         return DashboardOverviewDto.builder()
                 .totalUsers(totalUsers)
                 .activeUsers(activeUsers)
@@ -74,6 +107,9 @@ public class DashboardService {
                 .resolvedFeedbacks(resolved)
                 .ignoredFeedbacks(ignored)
                 .feedbacksByType(byType)
+                .usersByFlavor(usersByFlavor)
+                .paidOrdersByFlavor(paidOrdersByFlavor)
+                .gmvCentsByFlavor(gmvCentsByFlavor)
                 .serverTime(System.currentTimeMillis())
                 .build();
     }

@@ -20,6 +20,11 @@ public class UserSummaryDto {
     private String loginType;
     /** 注册来源（首次创建该 user 时的渠道），与 loginType 不同，本字段永不变更 */
     private String registrationSource;
+    /**
+     * 用户首次注册时的 App Flavor（CN / GLOBAL / null=未标注）。永不变更，用于运营侧按市场分析用户来源。
+     * <p>阶段 6 波 1 新增；老用户 null，Admin 前端按 UNKNOWN 展示。
+     */
+    private String registerFlavor;
     private Integer gender;
     /** 手机号，已脱敏（中间 4 位 *） */
     private String phoneMasked;
@@ -39,6 +44,7 @@ public class UserSummaryDto {
                 .avatarUrl(avatarUrlAbsolute)
                 .loginType(user.getLoginType() == null ? null : user.getLoginType().name())
                 .registrationSource(user.getRegistrationSource() == null ? null : user.getRegistrationSource().name())
+                .registerFlavor(user.getRegisterFlavor() == null ? null : user.getRegisterFlavor().name())
                 .gender(user.getGender())
                 .phoneMasked(phoneMasked)
                 .enabled(user.getEnabled())
