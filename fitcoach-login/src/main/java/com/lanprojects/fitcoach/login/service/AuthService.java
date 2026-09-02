@@ -339,6 +339,8 @@ public class AuthService {
         newUser.setAvatarUrl(resolveAvatarUrl(weChatUser.getHeadImgUrl()));
         newUser.setLoginType(User.LoginType.WECHAT);
         newUser.setRegistrationSource(User.RegistrationSource.WECHAT);
+        // 首次注册时锁定 App Flavor（阶段 2 多市场基建）；老客户端不上报为 null，日后统计可 filter
+        newUser.setRegisterFlavor(ClientContext.appFlavor());
         newUser.setOpenId(tokenResp.getOpenId());
         newUser.setUnionId(tokenResp.getUnionId());
         newUser.setGender(weChatUser.getSex());
@@ -382,6 +384,8 @@ public class AuthService {
         newUser.setAvatarUrl(resolveAvatarUrl(null));
         newUser.setLoginType(User.LoginType.PHONE);
         newUser.setRegistrationSource(User.RegistrationSource.PHONE);
+        // 首次注册时锁定 App Flavor（阶段 2 多市场基建）；老客户端不上报为 null，日后统计可 filter
+        newUser.setRegisterFlavor(ClientContext.appFlavor());
         newUser.setPhone(phone);
         newUser.setGender(0);
         newUser.setLastLoginAt(LocalDateTime.now());

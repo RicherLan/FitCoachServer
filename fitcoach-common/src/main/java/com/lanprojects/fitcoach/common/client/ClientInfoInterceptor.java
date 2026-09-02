@@ -9,7 +9,7 @@ import org.springframework.web.servlet.HandlerInterceptor;
 /**
  * 客户端版本信息拦截器 — 解析 {@code X-Client-*} / {@code X-Device-Id} Header → {@link ClientContext}。
  *
- * <p><b>跨端协议（Header 六件套）</b>：
+ * <p><b>跨端协议（Header 八件套）</b>：
  * <ul>
  *   <li>{@link #HDR_PLATFORM}            — "android" / "ios"</li>
  *   <li>{@link #HDR_NATIVE_VERSION_CODE} — int，如 1002003（即 1.2.3 编码后）</li>
@@ -18,6 +18,7 @@ import org.springframework.web.servlet.HandlerInterceptor;
  *   <li>{@link #HDR_BUNDLE_VERSION_NAME} — string</li>
  *   <li>{@link #HDR_DEVICE_ID}           — string，RN 端 UUIDv4 / "unknown" / 缺失</li>
  *   <li>{@link #HDR_LANG}                — string，BCP-47 语言标签（"zh-CN" / "en" / "fr" / ...），用于 i18n</li>
+ *   <li>{@link #HDR_APP_FLAVOR}          — string，"CN" / "GLOBAL"（阶段 2 新增，多市场基建）；老客户端不上报为 null</li>
  * </ul>
  *
  * <p><b>缺失/格式错误兜底</b>：
@@ -47,6 +48,12 @@ public class ClientInfoInterceptor implements HandlerInterceptor {
     public static final String HDR_DEVICE_ID = "X-Device-Id";
     /** 客户端当前界面语言（BCP-47），用于 i18n 翻译错误提示等对客户端可见的文案 */
     public static final String HDR_LANG = "X-Client-Lang";
+    /**
+     * App 编译期市场标识（CN / GLOBAL）—— 阶段 2 多市场基建新增。
+     * <p>由 RN 端 {@code src/common/flavor/flavor.ts} 的 {@code getAppFlavor()} 提供，
+     * 逐请求上报。老客户端不上报即为 null，业务侧应向后兼容。
+     */
+    public static final String HDR_APP_FLAVOR = "X-App-Flavor";
 
     @Override
     public boolean preHandle(HttpServletRequest request, HttpServletResponse response, Object handler) {
@@ -57,15 +64,17 @@ public class ClientInfoInterceptor implements HandlerInterceptor {
         String bundleName = trimToNull(request.getHeader(HDR_BUNDLE_VERSION_NAME));
         String deviceId = trimToNull(request.getHeader(HDR_DEVICE_ID));
         String lang = trimToNull(request.getHeader(HDR_LANG));
+        // AppFlavor.parse 内部已做 null / 空 / 非法值兜底：任一情况都返回 null（不做假设兜底）
+        AppFlavor appFlavor = AppFlavor.parse(request.getHeader(HDR_APP_FLAVOR));
 
         ClientVersionInfo info = new ClientVersionInfo(
-                platform, nativeCode, nativeName, bundleCode, bundleName, deviceId, lang);
+                platform, nativeCode, nativeName, bundleCode, bundleName, deviceId, lang, appFlavor);
         ClientContext.set(info);
 
         // DEBUG 级日志：avoid 生产刷屏；排错时调到 DEBUG 即可看到每个请求的客户端信息
         if (log.isDebugEnabled() && !info.isEmpty()) {
-            log.debug("client: platform={} native={}({}) bundle={}({}) device={} lang={} uri={}",
-                    platform, nativeName, nativeCode, bundleName, bundleCode, deviceId, lang, request.getRequestURI());
+            log.debug("client: platform={} native={}({}) bundle={}({}) device={} lang={} flavor={} uri={}",
+                    platform, nativeName, nativeCode, bundleName, bundleCode, deviceId, lang, appFlavor, request.getRequestURI());
         }
         return true;
     }

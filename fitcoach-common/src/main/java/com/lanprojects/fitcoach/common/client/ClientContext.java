@@ -118,4 +118,32 @@ public final class ClientContext {
             return Locale.SIMPLIFIED_CHINESE;
         }
     }
+
+    // ====== App Flavor 便捷 getter ======
+
+    /**
+     * 当前请求的 App 编译期市场标识（CN / GLOBAL / null）。
+     * <p>缺失场景：admin 后台 / Postman / 未升级到阶段 2 契约的老客户端。
+     * <p>业务侧不要在缺失时"假设 CN 或 GLOBAL"—— 缺失有明确语义（不是 RN 客户端），
+     * 需要按 flavor 做分支的业务应在缺失时走"两边都不满足"的兜底分支。
+     */
+    public static AppFlavor appFlavor() {
+        return get().appFlavor();
+    }
+
+    /**
+     * 语法糖：当前请求是否来自国内包（CN flavor）。
+     * <p>null 时返回 false（保守：非 RN 客户端不算 CN，避免把 admin 请求当 CN 处理）。
+     */
+    public static boolean isCn() {
+        return get().appFlavor() == AppFlavor.CN;
+    }
+
+    /**
+     * 语法糖：当前请求是否来自海外包（GLOBAL flavor）。
+     * <p>null 时返回 false（保守：非 RN 客户端不算 GLOBAL）。
+     */
+    public static boolean isGlobal() {
+        return get().appFlavor() == AppFlavor.GLOBAL;
+    }
 }

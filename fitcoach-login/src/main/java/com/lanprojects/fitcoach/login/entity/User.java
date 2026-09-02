@@ -1,5 +1,6 @@
 package com.lanprojects.fitcoach.login.entity;
 
+import com.lanprojects.fitcoach.common.client.AppFlavor;
 import com.lanprojects.fitcoach.common.entity.BaseEntity;
 import jakarta.persistence.*;
 import lombok.Getter;
@@ -76,6 +77,36 @@ public class User extends BaseEntity {
     @Column(name = "registration_source", length = 20)
     @Enumerated(EnumType.STRING)
     private RegistrationSource registrationSource;
+
+    /**
+     * 注册时的 App Flavor —— 用户首次创建 user 时上报的 {@link AppFlavor}（CN / GLOBAL）。
+     *
+     * <p><b>写入时机</b>：仅在 {@code AuthService.findOrCreateXxx} 首次 new User 时写一次，
+     * 后续任何登录、编辑资料操作<b>永不变更</b>（与 {@link #registrationSource} 语义对齐）。
+     *
+     * <p><b>用途</b>：
+     * <ul>
+     *   <li>运营分析："国内 App 注册用户占比"、"海外增长曲线"等按 flavor 维度拆分；</li>
+     *   <li>跨设备身份追溯：同一 user 从 CN 设备切换到 GLOBAL 设备（少见），本字段仍保留首次注册市场；</li>
+     *   <li>合规审计：欧盟 GDPR 要求区分数据主体归属区域，本字段是"用户从哪个市场入口首次接触本产品"的锚点。</li>
+     * </ul>
+     *
+     * <p><b>nullable 语义</b>：
+     * <ul>
+     *   <li>阶段 2 之前的历史用户 → null（未升级客户端契约的用户注册时没有此字段）；</li>
+     *   <li>admin 后台手动创建的用户 → null（admin 不属于任何 App 市场）；</li>
+     *   <li>阶段 2 之后 RN 客户端注册的用户 → CN 或 GLOBAL。</li>
+     * </ul>
+     * 业务侧统计时应先过滤 null（如 {@code WHERE register_flavor IS NOT NULL}）。
+     *
+     * <p><b>生产 DDL</b>（首次上线时手动执行；dev/base 环境 JPA ddl-auto=update 会自动加列）：
+     * <pre>{@code
+     *   ALTER TABLE user ADD COLUMN register_flavor VARCHAR(20) NULL COMMENT '注册时的 App Flavor: CN/GLOBAL';
+     * }</pre>
+     */
+    @Column(name = "register_flavor", length = 20)
+    @Enumerated(EnumType.STRING)
+    private AppFlavor registerFlavor;
 
     /**
      * 第三方平台 openid
