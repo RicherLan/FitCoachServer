@@ -76,10 +76,14 @@ public class PaymentService {
                     "下单套餐快照不完整或价格非法");
         }
 
-        // 1. 路由通道
+        // 1. 路由通道（未指定则按 flavor + 平台默认，指定则做 flavor 白名单校验）
         PaymentChannel channel = cmd.channel() != null
                 ? cmd.channel()
-                : channelRouter.resolveDefault(cmd.clientPlatform());
+                : channelRouter.resolveDefault(cmd.clientPlatform(), cmd.appFlavor());
+        // Flavor × Platform × Channel 白名单校验（阶段 4）：
+        // 防御 CN 包调 GOOGLE_PLAY / GLOBAL 包调 WECHAT 等越权支付；
+        // resolveDefault 兜底出的通道理论上一定合法，但为了逻辑一致性也走一遍校验
+        channelRouter.validateChannelAllowed(channel, cmd.appFlavor(), cmd.clientPlatform());
         PaymentChannelProvider provider = channelRouter.require(channel);
 
         // 2. 计算金额 + 币种（按通道决定币种，非常关键 —— 微信只能 CNY，Apple 必须本地币）

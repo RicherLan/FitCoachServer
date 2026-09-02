@@ -223,6 +223,19 @@ public enum ResultCode {
     PAYMENT_RECEIPT_ALREADY_USED(8111, "该收据已被使用，请勿重复提交", "payment.receipt_already_used"),
     PAYMENT_CONFIG_MISSING(8112, "支付通道配置缺失，请联系管理员", "payment.config_missing"),
     PAYMENT_PLATFORM_REQUIRED(8113, "无法识别客户端平台，请检查请求 Header", "payment.platform_required"),
+    /**
+     * Flavor × {@link com.lanprojects.fitcoach.payment.entity.PaymentChannel} 白名单校验拒绝
+     * —— 由 {@code com.lanprojects.fitcoach.payment.service.PaymentChannelRouter#validateChannelAllowed} 抛出。
+     * <p>触发链路：客户端请求头 {@code X-App-Flavor} 与目标支付通道不匹配
+     * （如 CN 包尝试使用 GOOGLE_PLAY，或 GLOBAL 包尝试使用 WECHAT）。
+     * <p>与 {@link #PAYMENT_CHANNEL_NOT_AVAILABLE}（8101，通道未注册/未配置）区分：
+     * 8114 表示"该通道不在当前 flavor 的白名单中"（编译期市场限制）。
+     * <p>正常客户端因 UI 层已按 {@code flavorProfile.paymentChannels} 过滤按钮不会触发；
+     * 此码主要用于防御 curl / 篡改客户端 / 绕过 UI 的越权支付请求。
+     * <p>注：{@code PaymentChannelRouter} 位于 fitcoach-payment 模块，此处只能用 {@code @code} 引用
+     * （fitcoach-common 不依赖 fitcoach-payment）。
+     */
+    PAYMENT_CHANNEL_NOT_ALLOWED_FOR_FLAVOR(8114, "当前 App 版本不支持该支付通道", "payment.channel_not_allowed_for_flavor"),
 
     // ====== 训练动作库 8201-8299（fitcoach-training-record · TrainingExercise，用户手动录入的动作字典） ======
     // 与 fitcoach-exercise 的 EXERCISE（AI 实时识别动作，7501 段）完全独立 —— 两个领域的 key 允许重名。

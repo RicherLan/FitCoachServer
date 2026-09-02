@@ -1,5 +1,6 @@
 package com.lanprojects.fitcoach.controller.payment;
 
+import com.lanprojects.fitcoach.common.client.AppFlavor;
 import com.lanprojects.fitcoach.common.client.ClientContext;
 import com.lanprojects.fitcoach.common.model.Result;
 import com.lanprojects.fitcoach.controller.payment.dto.CreateOrderRequest;
@@ -80,13 +81,17 @@ public class PaymentController {
                 plan.getPriceUsdCents()
         );
 
-        // 2. 平台 + IP（微信支付必填 spbill_create_ip；后续 ApplePaymentProvider 不关心）
+        // 2. 平台 + Flavor + IP
+        //   - platform：微信支付必填 spbill_create_ip；后续 ApplePaymentProvider 不关心
+        //   - appFlavor：阶段 4 新增 —— 支付通道白名单校验的关键依据（CN vs GLOBAL）；
+        //     非 RN 客户端（admin/Postman）为 null，PaymentChannelRouter 会跳过 flavor 维度校验
         String platform = ClientContext.platform();
+        AppFlavor appFlavor = ClientContext.appFlavor();
         String clientIp = resolveClientIp(httpRequest);
 
         // 3. 下单
         PaymentService.CreateOrderResponse svcResp = paymentService.createOrder(
-                new CreateOrderCommand(userId, snapshot, req.getChannel(), platform, clientIp));
+                new CreateOrderCommand(userId, snapshot, req.getChannel(), platform, appFlavor, clientIp));
 
         return Result.success(CreateOrderResponse.builder()
                 .orderId(svcResp.orderId())
