@@ -1,7 +1,5 @@
 package com.lanprojects.fitcoach.login.controller;
 
-import com.lanprojects.fitcoach.common.client.FlavorLoginPolicy;
-import com.lanprojects.fitcoach.common.client.LoginMethod;
 import com.lanprojects.fitcoach.common.exception.BusinessException;
 import com.lanprojects.fitcoach.common.model.Result;
 import com.lanprojects.fitcoach.common.model.ResultCode;
@@ -13,7 +11,9 @@ import com.lanprojects.fitcoach.login.dto.PhoneLoginRequest;
 import com.lanprojects.fitcoach.login.dto.RefreshTokenRequest;
 import com.lanprojects.fitcoach.login.dto.SendCodeRequest;
 import com.lanprojects.fitcoach.login.dto.WeChatLoginRequest;
+import com.lanprojects.fitcoach.login.entity.User;
 import com.lanprojects.fitcoach.login.service.AuthService;
+import com.lanprojects.fitcoach.login.support.FlavorLoginPolicy;
 import com.lanprojects.fitcoach.login.service.CaptchaService;
 import com.lanprojects.fitcoach.login.service.OtpService;
 import com.lanprojects.fitcoach.login.service.PasswordService;
@@ -53,7 +53,7 @@ public class AuthController {
     @PostMapping("/wechat/login")
     public Result<LoginResponse> wechatLogin(@Valid @RequestBody WeChatLoginRequest request) {
         // Flavor 白名单校验：仅 CN flavor / null（老客户端/admin/Postman）放行
-        FlavorLoginPolicy.ensureAllowed(LoginMethod.WECHAT);
+        FlavorLoginPolicy.ensureAllowed(User.LoginType.WECHAT);
         return Result.success(authService.wechatLogin(request.getCode()));
     }
 
@@ -69,7 +69,7 @@ public class AuthController {
             @Valid @RequestBody SendCodeRequest request,
             HttpServletRequest httpRequest) {
         // Flavor 白名单校验：仅 CN flavor / null 放行（GLOBAL 首版不做短信通道）
-        FlavorLoginPolicy.ensureAllowed(LoginMethod.PHONE);
+        FlavorLoginPolicy.ensureAllowed(User.LoginType.PHONE);
         String clientIp = getClientIp(httpRequest);
         // 先校验人机验证码（captcha.enabled=false 时自动跳过）
         captchaService.verify(request.getCaptchaTicket(), request.getCaptchaRandstr(), clientIp);
@@ -87,7 +87,7 @@ public class AuthController {
     @PostMapping("/phone/login")
     public Result<LoginResponse> phoneLogin(@Valid @RequestBody PhoneLoginRequest request) {
         // Flavor 白名单校验：仅 CN flavor / null 放行
-        FlavorLoginPolicy.ensureAllowed(LoginMethod.PHONE);
+        FlavorLoginPolicy.ensureAllowed(User.LoginType.PHONE);
         // 1) 先校验 OTP，校验失败直接抛业务码（OTP 内部限流也会触发对应错误）
         otpService.verifyOtp(request.getPhone(), request.getCode());
         // 2) 校验通过 → 进入 findOrCreate + 颁 token
@@ -106,7 +106,7 @@ public class AuthController {
             @Valid @RequestBody PasswordLoginRequest request,
             HttpServletRequest httpRequest) {
         // Flavor 白名单校验：手机号 + 密码本质属于手机号家族，归 PHONE 白名单
-        FlavorLoginPolicy.ensureAllowed(LoginMethod.PHONE);
+        FlavorLoginPolicy.ensureAllowed(User.LoginType.PHONE);
         // 透传 IP 进入 PasswordService → 启用 phone + IP 双维度本地限流，
         // 防止单账号枚举密码 / 同 IP 撒网爆破多账号。
         String clientIp = ClientIpResolver.resolve(httpRequest);
@@ -128,7 +128,7 @@ public class AuthController {
         // Flavor 白名单校验：ACCOUNT 是全 flavor 通用凭证，实际不会拦截；仅保留
         // 为对称性 + 未来若需按 flavor 限流账号密码尝试次数（如 GLOBAL 更严格）
         // 时提供切入点。
-        FlavorLoginPolicy.ensureAllowed(LoginMethod.ACCOUNT);
+        FlavorLoginPolicy.ensureAllowed(User.LoginType.ACCOUNT);
         String clientIp = ClientIpResolver.resolve(httpRequest);
         return Result.success(passwordService.loginByAccount(
                 request.getAccount(), request.getPassword(), clientIp));

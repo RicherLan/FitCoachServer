@@ -43,12 +43,14 @@ public enum ResultCode {
      */
     SESSION_KICKED(1006, "账号已在其他设备登录", "auth.session_kicked"),
     /**
-     * Flavor × LoginMethod 白名单校验拒绝 —— 由
-     * {@link com.lanprojects.fitcoach.common.client.FlavorLoginPolicy#ensureAllowed} 抛出。
+     * Flavor × {@link com.lanprojects.fitcoach.login.entity.User.LoginType} 白名单校验拒绝
+     * —— 由 {@code com.lanprojects.fitcoach.login.support.FlavorLoginPolicy#ensureAllowed} 抛出。
      * <p>触发链路：客户端请求头 {@code X-App-Flavor} 与目标登录端点不匹配
      * （如 CN 包尝试调 /api/auth/google/login，或 GLOBAL 包尝试调 /api/auth/wechat/login）。
      * <p>正常客户端因 UI 层已按 flavorProfile 过滤按钮不会触发；此码主要用于
      * 防御 curl / 篡改客户端 / 绕过 UI 的越权请求。
+     * <p>注：{@code FlavorLoginPolicy} 位于 fitcoach-login 模块（因需引用 User.LoginType），
+     * 此处只能用 {@code @code} 引用不能用 {@code @link}（fitcoach-common 不依赖 fitcoach-login）。
      */
     LOGIN_METHOD_NOT_ALLOWED(1007, "当前 App 版本不支持该登录方式", "auth.login_method_not_allowed"),
 
