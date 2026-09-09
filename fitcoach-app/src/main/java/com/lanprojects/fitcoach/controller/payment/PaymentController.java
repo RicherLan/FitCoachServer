@@ -204,6 +204,30 @@ public class PaymentController {
         }
     }
 
+    /**
+     * 微信退款结果回调（波 2）—— 签名校验 + 解密 + 置退款单完成。
+     *
+     * <p>与支付回调 {@link #wechatNotify} 对称。退款请求时通过 {@code payment.wechat.refundNotifyUrl}
+     * 配置的地址接收；仅 REFUND.SUCCESS 会触发退款单完成 + 发 PaymentRefundedEvent（撤会员）。
+     */
+    @PostMapping("/notify/wechat/refund")
+    public Map<String, String> wechatRefundNotify(
+            @RequestHeader(value = "Wechatpay-Timestamp", required = false) String timestamp,
+            @RequestHeader(value = "Wechatpay-Nonce", required = false) String nonce,
+            @RequestHeader(value = "Wechatpay-Signature", required = false) String signature,
+            @RequestHeader(value = "Wechatpay-Serial", required = false) String serial,
+            @RequestBody(required = false) String body) {
+
+        boolean success = weChatCallbackHandler.handleRefundCallback(
+                timestamp, nonce, signature, serial, body);
+
+        if (success) {
+            return Map.of("code", "SUCCESS", "message", "OK");
+        } else {
+            return Map.of("code", "FAIL", "message", "处理失败，请重试");
+        }
+    }
+
     // ====== 内部 ======
 
     /**

@@ -31,6 +31,8 @@ public final class PaymentConfigKeys {
     public static final String WECHAT_MCH_SERIAL_NO = "payment.wechat.mchSerialNo";
     /** 微信支付回调 URL（外部可访问域名） */
     public static final String WECHAT_NOTIFY_URL = "payment.wechat.notifyUrl";
+    /** 微信退款结果回调 URL（外部可访问域名）；未配则退款不接收异步通知，靠对账/手动查询兜底 */
+    public static final String WECHAT_REFUND_NOTIFY_URL = "payment.wechat.refundNotifyUrl";
     /** 商户 API 私钥（PEM 格式，加密存储） */
     public static final String WECHAT_MCH_PRIVATE_KEY = "payment.wechat.mchPrivateKey";
     /** 微信支付平台证书 PEM（用于回调验签，加密存储）。可通过商户证书调 /v3/certificates 接口获取 */
@@ -48,4 +50,13 @@ public final class PaymentConfigKeys {
     public static final String APPLE_SHARED_SECRET = "payment.apple.sharedSecret";
     /** 是否走 sandbox 环境（开发/审核时 true） */
     public static final String APPLE_SANDBOX = "payment.apple.sandbox";
+
+    // ====== Google Play Billing（波 4） ======
+
+    /** Google Play 总开关 */
+    public static final String GOOGLE_PLAY_ENABLED = "payment.googleplay.enabled";
+    /** 应用包名（如 com.lanprojects.fitcoach） */
+    public static final String GOOGLE_PLAY_PACKAGE_NAME = "payment.googleplay.packageName";
+    /** Google Cloud Service Account 凭证 JSON（加密存储），用于调 Google Play Developer API 验单 / 退款 */
+    public static final String GOOGLE_PLAY_SERVICE_ACCOUNT_JSON = "payment.googleplay.serviceAccountJson";
 }

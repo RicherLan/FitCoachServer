@@ -12,6 +12,9 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
 
+import java.util.HashMap;
+import java.util.Map;
+
 /**
  * Apple In-App Purchase Provider — 当前为<b>占位实现</b>，等开发者账号申请到位后接入。
  *
@@ -49,14 +52,21 @@ public class AppleIAPProvider implements PaymentChannelProvider {
 
     @Override
     public CreateOrderResult createOrder(CreateOrderRequest request) {
-        // TODO(P4): 苹果开发者账号申请后实现：
-        //  1. 此方法返回的 clientPayload 主要供客户端确认 plan/amount 显示用，IAP 不需要 prepay_id
-        //  2. 客户端拿 result 后用 RN react-native-iap 的 requestSubscription / requestPurchase 自己拉起
-        //  3. 客户端拿到 transactionReceipt 调 /api/payment/apple/verify 完成验单 → 切 PAID
-        log.error("[apple-iap] Apple IAP 未接入：orderId={} userId={} productCode={} —— 等待苹果开发者账号申请",
+        // IAP 是「客户端发起 + 服务端验单」模式（与微信「服务端统一下单」不同）：
+        //   1. createOrder 仅占位 PENDING 订单（PaymentService 已落库），返回 productCode 供客户端映射 appleProductId；
+        //   2. 客户端用 StoreKit / react-native-iap 拉起购买，拿到 signedTransaction(JWS)；
+        //   3. 客户端调 POST /api/payment/apple/verify 提交 orderId + signedTransaction；
+        //   4. 服务端验签解析 → markPaid → 发 PaymentSucceededEvent。
+        log.info("[apple-iap] 创建 IAP 占位订单 orderId={} userId={} productCode={}",
                 request.orderId(), request.userId(), request.productCode());
-        throw new BusinessException(ResultCode.PAYMENT_PROVIDER_ERROR,
-                "Apple In-App Purchase 即将上线，请耐心等待");
+        Map<String, Object> payload = new HashMap<>();
+        payload.put("channel", "APPLE_IAP");
+        payload.put("orderId", request.orderId());
+        payload.put("productCode", request.productCode());
+        payload.put("amountCents", request.amountCents());
+        payload.put("currency", request.currency());
+        payload.put("message", "请在客户端通过 App Store 完成购买后调用 /api/payment/apple/verify 验单");
+        return new CreateOrderResult(null, payload, false);
     }
 
     private static boolean notBlank(String s) {

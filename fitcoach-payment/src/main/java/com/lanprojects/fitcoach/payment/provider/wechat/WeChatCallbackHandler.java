@@ -7,6 +7,7 @@ import com.lanprojects.fitcoach.common.exception.BusinessException;
 import com.lanprojects.fitcoach.common.model.ResultCode;
 import com.lanprojects.fitcoach.payment.provider.PaymentConfigKeys;
 import com.lanprojects.fitcoach.payment.service.PaymentService;
+import com.lanprojects.fitcoach.payment.service.RefundService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
@@ -58,6 +59,7 @@ public class WeChatCallbackHandler {
 
     private final SysConfigService sysConfigService;
     private final PaymentService paymentService;
+    private final RefundService refundService;
     private final ObjectMapper objectMapper;
 
     /**
@@ -160,6 +162,69 @@ public class WeChatCallbackHandler {
         } catch (Exception e) {
             log.error("[wechat-pay] 回调处理异常", e);
             return false; // 返回 FAIL，微信会重试
+        }
+    }
+
+    /**
+     * 处理微信退款结果回调（{@code /v3/refund/domestic/refunds} 的异步通知，波 2）。
+     *
+     * <p>回调 event_type：REFUND.SUCCESS / REFUND.ABNORMAL / REFUND.CLOSED；
+     * 解密后 resource 含 out_refund_no / refund_id / refund_status。
+     * 仅 REFUND.SUCCESS + refund_status=SUCCESS 时调 {@link RefundService#completeByChannelRefundId}
+     * 把退款单置完成（内部幂等）。
+     *
+     * @return true 表示已处理（返回 SUCCESS ack，微信不再重试）
+     */
+    public boolean handleRefundCallback(String wechatpayTimestamp, String wechatpayNonce,
+                                        String wechatpaySignature, String wechatpaySerial,
+                                        String body) {
+        log.info("[wechat-refund] 收到退款回调 bodyLen={}", body == null ? 0 : body.length());
+        if (!verifyCallbackSignatureOrSkip(wechatpayTimestamp, wechatpayNonce,
+                wechatpaySignature, wechatpaySerial, body)) {
+            return false;
+        }
+        try {
+            Map<String, Object> outerMap = objectMapper.readValue(body, new TypeReference<>() {});
+            String eventType = (String) outerMap.get("event_type");
+            log.info("[wechat-refund] 回调事件类型 event_type={}", eventType);
+
+            @SuppressWarnings("unchecked")
+            Map<String, Object> resource = (Map<String, Object>) outerMap.get("resource");
+            if (resource == null) {
+                log.error("[wechat-refund] 回调缺少 resource 字段");
+                return false;
+            }
+            String apiV3Key = sysConfigService.getValue(PaymentConfigKeys.WECHAT_API_V3_KEY);
+            if (apiV3Key == null || apiV3Key.isBlank()) {
+                log.error("[wechat-refund] 缺少 API V3 密钥，无法解密退款回调");
+                return false;
+            }
+            String decryptedJson = WeChatPayV3Helper.decryptAesGcm(apiV3Key,
+                    (String) resource.get("nonce"),
+                    (String) resource.get("associated_data"),
+                    (String) resource.get("ciphertext"));
+            if (decryptedJson == null || decryptedJson.isBlank()) {
+                log.error("[wechat-refund] 退款回调解密返回空");
+                return false;
+            }
+
+            Map<String, Object> refund = objectMapper.readValue(decryptedJson, new TypeReference<>() {});
+            String refundId = (String) refund.get("refund_id");
+            String outRefundNo = (String) refund.get("out_refund_no");
+            String refundStatus = (String) refund.get("refund_status");
+            log.info("[wechat-refund] 退款回调 out_refund_no={} refund_id={} refund_status={}",
+                    outRefundNo, refundId, refundStatus);
+
+            if ("REFUND.SUCCESS".equals(eventType) && "SUCCESS".equals(refundStatus) && refundId != null) {
+                refundService.completeByChannelRefundId(refundId, decryptedJson);
+            } else {
+                log.warn("[wechat-refund] 退款未成功或非 SUCCESS 事件，忽略 eventType={} refundStatus={}",
+                        eventType, refundStatus);
+            }
+            return true;
+        } catch (Exception e) {
+            log.error("[wechat-refund] 退款回调处理异常", e);
+            return false;
         }
     }
 

@@ -213,6 +213,56 @@ public class RefundService {
                 refund.getRefundNo(), order.getOrderId(), refund.getAmountCents(), totalRefunded, fully);
     }
 
+    /**
+     * 记录被动退款（平台已退款的通知场景：Apple ASSN REFUND / Google RTDN VOIDED_PURCHASE）。
+     *
+     * <p>与 {@link #refund} 的区别：<b>强制 PASSIVE 模式</b>，不调通道退款 API（钱已被平台退掉），
+     * 仅建退款单 + 记账 + 回写订单 + 发退款事件（撤权益）。即使通道 {@code supportsActiveRefund=true}
+     * （如 Google Play），通知场景也必须走这里，避免对已退款的交易再次发起主动退款。
+     *
+     * <p>幂等：订单非 PAID（已被处理过）或无可退余额时直接跳过，防通知重投重复退款。
+     * 金额超过剩余可退额时钳制到剩余（以平台为准）。
+     *
+     * @return 退款单；幂等跳过时返回 {@code null}
+     */
+    @Transactional
+    public RefundOrder recordPassiveRefund(String orderId, Integer refundCents, String reason, String operator) {
+        PaymentOrder order = orderRepository.findByOrderId(orderId)
+                .orElseThrow(() -> new BusinessException(ResultCode.PAYMENT_ORDER_NOT_FOUND));
+        if (order.getStatus() != OrderStatus.PAID) {
+            log.info("[refund] 被动退款订单非 PAID，幂等跳过 orderId={} status={}", orderId, order.getStatus());
+            return null;
+        }
+        long alreadyRefunded = refundRepository.sumAmountByOrderIdAndStatus(orderId, RefundStatus.COMPLETED);
+        int amount = (refundCents == null || refundCents <= 0)
+                ? (int) (order.getAmountCents() - alreadyRefunded)
+                : refundCents;
+        if (amount <= 0) {
+            log.info("[refund] 被动退款无可退余额，跳过 orderId={}", orderId);
+            return null;
+        }
+        if (alreadyRefunded + amount > order.getAmountCents()) {
+            // 平台退款以平台为准，钳制到剩余可退额
+            amount = (int) (order.getAmountCents() - alreadyRefunded);
+        }
+        RefundOrder refund = new RefundOrder();
+        refund.setRefundNo(generateRefundNo(order.getUserId()));
+        refund.setOrderId(orderId);
+        refund.setUserId(order.getUserId());
+        refund.setChannel(order.getChannel());
+        refund.setRefundMode(RefundMode.PASSIVE);
+        refund.setAmountCents(amount);
+        refund.setCurrency(order.getCurrency());
+        refund.setStatus(RefundStatus.PENDING);
+        refund.setReason(reason);
+        refund.setOperator(operator);
+        refund = refundRepository.save(refund);
+        markRefundCompleted(refund, order);
+        log.info("[refund] 被动退款记账完成 refundNo={} orderId={} amount={} operator={}",
+                refund.getRefundNo(), orderId, amount, operator);
+        return refund;
+    }
+
     /** 某订单的退款单列表（admin 订单详情展示退款历史用） */
     public List<RefundOrder> listByOrderId(String orderId) {
         return refundRepository.findByOrderIdOrderByCreatedAtDesc(orderId);

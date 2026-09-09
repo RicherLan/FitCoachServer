@@ -12,6 +12,8 @@ import com.lanprojects.fitcoach.payment.provider.CreateOrderRequest;
 import com.lanprojects.fitcoach.payment.provider.CreateOrderResult;
 import com.lanprojects.fitcoach.payment.provider.PaymentChannelProvider;
 import com.lanprojects.fitcoach.payment.provider.PaymentConfigKeys;
+import com.lanprojects.fitcoach.payment.provider.RefundRequest;
+import com.lanprojects.fitcoach.payment.provider.RefundResult;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
@@ -44,6 +46,8 @@ public class WeChatPaymentProvider implements PaymentChannelProvider {
 
     private static final String WECHAT_APP_ORDER_URL = "https://api.mch.weixin.qq.com/v3/pay/transactions/app";
     private static final String WECHAT_APP_ORDER_PATH = "/v3/pay/transactions/app";
+    private static final String WECHAT_REFUND_URL = "https://api.mch.weixin.qq.com/v3/refund/domestic/refunds";
+    private static final String WECHAT_REFUND_PATH = "/v3/refund/domestic/refunds";
 
     /** HTTP 请求超时：连接 5s / 读取 10s */
     private static final int CONNECT_TIMEOUT = 5_000;
@@ -156,6 +160,107 @@ public class WeChatPaymentProvider implements PaymentChannelProvider {
         log.info("[wechat-pay] 二次签名完成 orderId={} prepayId={}", request.orderId(), prepayId);
 
         return new CreateOrderResult(prepayId, clientPayload, false);
+    }
+
+    // ====== 退款（波 2）======
+
+    @Override
+    public boolean supportsActiveRefund() {
+        return true;
+    }
+
+    /**
+     * 微信退款（V3）—— 调用 {@code POST /v3/refund/domestic/refunds} 把钱原路退回。
+     *
+     * <p>响应 {@code status} 语义：SUCCESS 退款成功 / PROCESSING 退款处理中（等退款回调）/
+     * CLOSED 退款关闭 / ABNORMAL 退款异常。SUCCESS 时 {@code synchronouslyCompleted=true} 可直接置完成；
+     * PROCESSING 时受理成功但需等退款结果回调（{@code refundNotifyUrl}）再置完成。
+     *
+     * @see <a href="https://pay.weixin.qq.com/docs/merchant/apis/refund/refunds/create.html">微信退款 API</a>
+     */
+    @Override
+    public RefundResult refund(RefundRequest request) {
+        String mchId = requireConfig(PaymentConfigKeys.WECHAT_MCH_ID, "微信商户号");
+        String serialNo = requireConfig(PaymentConfigKeys.WECHAT_MCH_SERIAL_NO, "商户证书序列号");
+        String privateKeyPem = requireConfig(PaymentConfigKeys.WECHAT_MCH_PRIVATE_KEY, "商户私钥");
+        String refundNotifyUrl = sysConfigService.getValue(PaymentConfigKeys.WECHAT_REFUND_NOTIFY_URL);
+
+        PrivateKey privateKey;
+        try {
+            privateKey = WeChatPayV3Helper.loadPrivateKeyFromPem(privateKeyPem);
+        } catch (Exception e) {
+            log.error("[wechat-refund] 商户私钥解析失败 refundNo={}", request.refundNo(), e);
+            throw new BusinessException(ResultCode.REFUND_PROVIDER_ERROR, "微信退款配置错误（私钥无效）");
+        }
+
+        String bodyJson = buildRefundBodyJson(request, refundNotifyUrl);
+        String authorization = WeChatPayV3Helper.buildAuthorizationHeader(
+                "POST", WECHAT_REFUND_PATH, bodyJson, mchId, serialNo, privateKey);
+        log.info("[wechat-refund] 发起退款 refundNo={} orderId={} refundCents={}",
+                request.refundNo(), request.orderId(), request.refundCents());
+
+        try (HttpResponse response = HttpRequest.post(WECHAT_REFUND_URL)
+                .header("Authorization", authorization)
+                .header("Content-Type", "application/json")
+                .header("Accept", "application/json")
+                .body(bodyJson)
+                .timeout(CONNECT_TIMEOUT)
+                .setReadTimeout(READ_TIMEOUT)
+                .execute()) {
+
+            int status = response.getStatus();
+            String respBody = response.body();
+            if (status < 200 || status >= 300) {
+                log.error("[wechat-refund] 退款失败 refundNo={} status={} body={}",
+                        request.refundNo(), status, respBody);
+                throw new BusinessException(ResultCode.REFUND_PROVIDER_ERROR,
+                        "微信退款失败：" + parseWechatErrorMessage(respBody));
+            }
+
+            Map<String, Object> respMap = objectMapper.readValue(respBody, new TypeReference<>() {});
+            String refundId = (String) respMap.get("refund_id");
+            String refundState = (String) respMap.get("status");
+            boolean syncCompleted = "SUCCESS".equals(refundState);
+            boolean accepted = syncCompleted || "PROCESSING".equals(refundState);
+            if (!accepted) {
+                log.error("[wechat-refund] 退款状态异常 refundNo={} state={} body={}",
+                        request.refundNo(), refundState, respBody);
+                throw new BusinessException(ResultCode.REFUND_PROVIDER_ERROR,
+                        "微信退款状态异常：" + refundState);
+            }
+            log.info("[wechat-refund] 退款受理 refundNo={} refundId={} state={} sync={}",
+                    request.refundNo(), refundId, refundState, syncCompleted);
+            return new RefundResult(refundId, true, syncCompleted, respBody);
+
+        } catch (BusinessException be) {
+            throw be;
+        } catch (Exception e) {
+            log.error("[wechat-refund] 退款异常 refundNo={}", request.refundNo(), e);
+            throw new BusinessException(ResultCode.REFUND_PROVIDER_ERROR, "微信退款异常：" + e.getMessage());
+        }
+    }
+
+    /** 构建微信退款请求 JSON（out_trade_no + out_refund_no + amount{refund,total,currency}）。 */
+    private String buildRefundBodyJson(RefundRequest request, String refundNotifyUrl) {
+        try {
+            Map<String, Object> body = new LinkedHashMap<>();
+            body.put("out_trade_no", request.orderId());
+            body.put("out_refund_no", request.refundNo());
+            if (request.reason() != null && !request.reason().isBlank()) {
+                body.put("reason", truncate(request.reason(), 80));
+            }
+            if (refundNotifyUrl != null && !refundNotifyUrl.isBlank()) {
+                body.put("notify_url", refundNotifyUrl);
+            }
+            Map<String, Object> amount = new LinkedHashMap<>();
+            amount.put("refund", request.refundCents());
+            amount.put("total", request.totalAmountCents());
+            amount.put("currency", request.currency());
+            body.put("amount", amount);
+            return objectMapper.writeValueAsString(body);
+        } catch (Exception e) {
+            throw new RuntimeException("构建微信退款 JSON 失败", e);
+        }
     }
 
     // ====== 内部方法 ======
