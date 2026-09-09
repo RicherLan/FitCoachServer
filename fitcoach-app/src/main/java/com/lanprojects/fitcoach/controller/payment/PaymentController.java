@@ -7,13 +7,14 @@ import com.lanprojects.fitcoach.controller.payment.dto.CreateOrderRequest;
 import com.lanprojects.fitcoach.controller.payment.dto.CreateOrderResponse;
 import com.lanprojects.fitcoach.controller.payment.dto.PaymentOrderDTO;
 import com.lanprojects.fitcoach.login.support.AuthSupport;
+import com.lanprojects.fitcoach.membership.MembershipProductType;
 import com.lanprojects.fitcoach.membership.entity.MembershipPlan;
 import com.lanprojects.fitcoach.membership.service.MembershipService;
 import com.lanprojects.fitcoach.payment.entity.PaymentOrder;
 import com.lanprojects.fitcoach.payment.provider.wechat.WeChatCallbackHandler;
 import com.lanprojects.fitcoach.payment.service.CreateOrderCommand;
 import com.lanprojects.fitcoach.payment.service.PaymentService;
-import com.lanprojects.fitcoach.payment.service.PlanSnapshot;
+import com.lanprojects.fitcoach.payment.service.ProductSnapshot;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.validation.Valid;
@@ -58,7 +59,7 @@ public class PaymentController {
      *
      * <p>流程：
      * <ol>
-     *   <li>查 plan（必须启用），转 PlanSnapshot；</li>
+     *   <li>查 plan（必须启用），转通用 ProductSnapshot（productType=MEMBERSHIP）；</li>
      *   <li>从 ClientContext 取 platform（X-Client-Platform Header），作为通道路由依据；</li>
      *   <li>调 PaymentService.createOrder 落库 PENDING + 调 Provider 创建通道侧订单；</li>
      *   <li>MOCK 通道下单即视为支付成功，立即触发会员激活事件；</li>
@@ -74,7 +75,10 @@ public class PaymentController {
 
         // 1. 查 plan + 转 snapshot（snapshot 是 payment 模块对外的 plan 契约，避免反向依赖 membership）
         MembershipPlan plan = membershipService.findEnabledPlanByCode(req.getPlanCode());
-        PlanSnapshot snapshot = new PlanSnapshot(
+        // 去业务化（波 0）：转成通用商品快照传给 payment，productType=MEMBERSHIP，
+        // productCode=planCode。payment 模块不认识"会员"，仅按 productType 回抛事件供本业务认领。
+        ProductSnapshot snapshot = new ProductSnapshot(
+                MembershipProductType.MEMBERSHIP,
                 plan.getPlanCode(),
                 plan.getDisplayName(),
                 plan.getPriceCny(),

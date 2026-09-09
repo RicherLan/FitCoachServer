@@ -171,7 +171,7 @@ public class WeChatPaymentProvider implements PaymentChannelProvider {
             Map<String, Object> body = new LinkedHashMap<>();
             body.put("appid", appId);
             body.put("mchid", mchId);
-            body.put("description", truncate(request.planDisplayName(), 127));
+            body.put("description", truncate(request.productName(), 127));
             body.put("out_trade_no", request.orderId());
             body.put("notify_url", notifyUrl);
 

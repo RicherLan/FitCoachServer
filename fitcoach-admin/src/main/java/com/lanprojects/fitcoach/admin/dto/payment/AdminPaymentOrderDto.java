@@ -22,8 +22,9 @@ public class AdminPaymentOrderDto {
     private Long userId;
     private String userUid;        // 由 controller join 出来填上
     private String userNickname;   // 同上
-    private String planCode;
-    private String planSnapshotName;
+    private String productType;
+    private String productCode;
+    private String productName;
     private PaymentChannel channel;
     private String clientPlatform;
     /** 下单时的 App Flavor（CN / GLOBAL / null=未标注），阶段 4 波 2 新增 */
@@ -46,8 +47,9 @@ public class AdminPaymentOrderDto {
                 .id(o.getId())
                 .orderId(o.getOrderId())
                 .userId(o.getUserId())
-                .planCode(o.getPlanCode())
-                .planSnapshotName(o.getPlanSnapshotName())
+                .productType(o.getProductType())
+                .productCode(o.getProductCode())
+                .productName(o.getProductName())
                 .channel(o.getChannel())
                 .clientPlatform(o.getClientPlatform())
                 .appFlavor(o.getAppFlavor())

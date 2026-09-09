@@ -16,7 +16,7 @@ import java.time.LocalDateTime;
  * <ul>
  *   <li><b>order_id 业务订单号</b>：自己生成的雪花/时间戳串，user_id 无关，{@code unique}，所有外部引用都用它（包括微信
  *       的 out_trade_no、回调日志关联），不暴露内部主键 id；</li>
- *   <li><b>套餐快照</b>：plan_code + plan_snapshot_name + amount_cents 三者都冗余在订单上，确保套餐改名/调价
+ *   <li><b>商品快照</b>：product_type + product_code + product_name + amount_cents 都冗余在订单上，确保商品改名/调价
  *       后历史订单展示不变；</li>
  *   <li><b>金额单位</b>：{@code amount_cents} 永远是最小货币单位（CNY 分 / USD 美分），杜绝浮点；</li>
  *   <li><b>时间</b>：所有时间字段 {@link Instant}（UTC），客户端按本地时区格式化；</li>
@@ -50,15 +50,23 @@ public class PaymentOrder extends BaseEntity {
     @Column(name = "user_id", nullable = false)
     private Long userId;
 
-    /** 套餐 code（业务 key），与 membership_plan.plan_code 一致 */
-    @Column(name = "plan_code", nullable = false, length = 32)
-    private String planCode;
+    /**
+     * 商品类型（业务方自定义，如 "MEMBERSHIP" / "COINS" / "COURSE"）。
+     * <p>去业务化（波 0）：payment 模块不解释其语义，仅落库 + 随 {@code PaymentSucceededEvent} 回抛，
+     * 业务方监听后据此分发。让 payment 模块可跨 App 复用。
+     */
+    @Column(name = "product_type", nullable = false, length = 32)
+    private String productType;
+
+    /** 商品业务 code（如会员套餐 planCode "MONTHLY"），与具体业务表的业务 key 对应 */
+    @Column(name = "product_code", nullable = false, length = 64)
+    private String productCode;
 
     /**
-     * 下单时套餐显示名快照。即使后续套餐改名，该订单仍显示购买当时的名字（用户体验/客服查询友好）。
+     * 下单时商品显示名快照。即使后续商品改名，该订单仍显示购买当时的名字（用户体验/客服查询友好）。
      */
-    @Column(name = "plan_snapshot_name", nullable = false, length = 64)
-    private String planSnapshotName;
+    @Column(name = "product_name", nullable = false, length = 128)
+    private String productName;
 
     /**
      * 支付通道

@@ -4,6 +4,7 @@ import com.lanprojects.fitcoach.common.cache.CacheNames;
 import com.lanprojects.fitcoach.common.event.PaymentSucceededEvent;
 import com.lanprojects.fitcoach.common.exception.BusinessException;
 import com.lanprojects.fitcoach.common.model.ResultCode;
+import com.lanprojects.fitcoach.membership.MembershipProductType;
 import com.lanprojects.fitcoach.membership.entity.MembershipActivationFailure;
 import com.lanprojects.fitcoach.membership.entity.MembershipActivationFailure.Status;
 import com.lanprojects.fitcoach.membership.entity.MembershipPlan;
@@ -167,15 +168,21 @@ public class MembershipService {
     @Async
     @TransactionalEventListener(phase = TransactionPhase.AFTER_COMMIT, classes = PaymentSucceededEvent.class)
     public void onPaymentSucceeded(PaymentSucceededEvent event) {
+        // 去业务化（波 0）：payment 模块对所有商品都发同一事件，会员模块只认领 productType=MEMBERSHIP，
+        // 其它类型（如未来 App 的 COINS/COURSE）由对应业务模块各自监听，互不干扰。
+        if (!MembershipProductType.MEMBERSHIP.equals(event.getProductType())) {
+            return;
+        }
         try {
-            log.info("[membership] 收到支付成功事件 orderId={} userId={} planCode={} channel={}",
-                    event.getOrderId(), event.getUserId(), event.getPlanCode(), event.getChannel());
-            activate(event.getUserId(), event.getPlanCode(), event.getOrderId());
+            // 会员语境下 productCode 即 planCode
+            log.info("[membership] 收到支付成功事件 orderId={} userId={} productCode={} channel={}",
+                    event.getOrderId(), event.getUserId(), event.getProductCode(), event.getChannel());
+            activate(event.getUserId(), event.getProductCode(), event.getOrderId());
         } catch (Exception e) {
             // 监听器异常不能扩散：扩散会让 Spring 误判事件传播失败，但 payment 事务已经 commit
             // 如果激活失败 → 写入失败记录表，由 MembershipActivationRetryJob 周期重试，避免静默丢失资损
-            log.error("[membership] 激活会员失败，已记录待补偿 orderId={} userId={} planCode={}",
-                    event.getOrderId(), event.getUserId(), event.getPlanCode(), e);
+            log.error("[membership] 激活会员失败，已记录待补偿 orderId={} userId={} productCode={}",
+                    event.getOrderId(), event.getUserId(), event.getProductCode(), e);
             try {
                 recordActivationFailure(event, e);
             } catch (Exception persistEx) {
@@ -203,7 +210,7 @@ public class MembershipService {
             // 新记录
             failure.setOrderId(event.getOrderId());
             failure.setUserId(event.getUserId());
-            failure.setPlanCode(event.getPlanCode());
+            failure.setPlanCode(event.getProductCode());
             failure.setStatus(Status.PENDING);
             failure.setRetryCount(1);
             failure.setNextRetryAt(LocalDateTime.now().plusNanos(INITIAL_BACKOFF_MS * 1_000_000L));
@@ -239,7 +246,8 @@ public class MembershipService {
             PaymentSucceededEvent pseudoEvent = PaymentSucceededEvent.builder()
                     .orderId(failure.getOrderId())
                     .userId(failure.getUserId())
-                    .planCode(failure.getPlanCode())
+                    .productType(MembershipProductType.MEMBERSHIP)
+                    .productCode(failure.getPlanCode())
                     .build();
             try {
                 recordActivationFailure(pseudoEvent, e);

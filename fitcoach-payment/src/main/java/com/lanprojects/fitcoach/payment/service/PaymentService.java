@@ -43,10 +43,10 @@ import java.util.concurrent.ThreadLocalRandom;
  *   <li>commit 后 markPaid 内的 publishEvent 才生效（@TransactionalEventListener AFTER_COMMIT）。</li>
  * </ol>
  *
- * <p><b>「PaymentService 不依赖 MembershipService」</b>：
- * Plan 详情由调用方（Controller / 上层服务）查好后通过 {@link PlanSnapshot} 传入，
- * 激活完全走 Spring 事件解耦——payment 模块只发事件，不知道「监听者是谁、是否激活成功」。
- * 这样 payment 和 membership 两个模块在编译期完全独立，互不感知。
+ * <p><b>「PaymentService 不依赖任何业务模块」</b>（去业务化，波 0）：
+ * 商品详情由调用方（Controller / 上层业务服务）查好后通过 {@link ProductSnapshot} 传入，
+ * 发货完全走 Spring 事件解耦——payment 模块只发 {@code PaymentSucceededEvent}（带 productType/productCode），
+ * 不知道「监听者是谁、买的是会员还是别的、是否发货成功」。这样 payment 模块可跨 App 原样复用。
  */
 @Slf4j
 @Service
@@ -71,10 +71,12 @@ public class PaymentService {
      */
     @Transactional
     public CreateOrderResponse createOrder(CreateOrderCommand cmd) {
-        PlanSnapshot plan = cmd.plan();
-        if (plan == null || plan.planCode() == null || plan.priceCny() == null || plan.priceCny() <= 0) {
+        ProductSnapshot product = cmd.product();
+        if (product == null || product.productType() == null || product.productCode() == null
+                || product.priceCny() == null || product.priceCny() <= 0) {
+            // 注：错误码 MEMBERSHIP_PLAN_PRICE_INVALID 语义偏会员，波 5 收尾统一改成通用的 PAYMENT_PRODUCT_PRICE_INVALID
             throw new BusinessException(ResultCode.MEMBERSHIP_PLAN_PRICE_INVALID,
-                    "下单套餐快照不完整或价格非法");
+                    "下单商品快照不完整或价格非法");
         }
 
         // 1. 路由通道（未指定则按 flavor + 平台默认，指定则做 flavor 白名单校验）
@@ -91,14 +93,14 @@ public class PaymentService {
         int amountCents;
         String currency;
         if (channel == PaymentChannel.APPLE_IAP || channel == PaymentChannel.GOOGLE_PLAY) {
-            if (plan.priceUsdCents() == null || plan.priceUsdCents() <= 0) {
+            if (product.priceUsdCents() == null || product.priceUsdCents() <= 0) {
                 throw new BusinessException(ResultCode.PAYMENT_CONFIG_MISSING,
-                        "套餐 " + plan.planCode() + " 缺少海外价格配置（priceUsdCents）");
+                        "商品 " + product.productCode() + " 缺少海外价格配置（priceUsdCents）");
             }
-            amountCents = plan.priceUsdCents();
+            amountCents = product.priceUsdCents();
             currency = CURRENCY_USD;
         } else {
-            amountCents = plan.priceCny();
+            amountCents = product.priceCny();
             currency = CURRENCY_CNY;
         }
 
@@ -107,8 +109,9 @@ public class PaymentService {
         PaymentOrder order = new PaymentOrder();
         order.setOrderId(orderId);
         order.setUserId(cmd.userId());
-        order.setPlanCode(plan.planCode());
-        order.setPlanSnapshotName(plan.displayName());
+        order.setProductType(product.productType());
+        order.setProductCode(product.productCode());
+        order.setProductName(product.productName());
         order.setChannel(channel);
         order.setClientPlatform(cmd.clientPlatform());
         // 阶段 4 波 2：落 app_flavor 便于 Admin 按市场筛单 / 财务报表按市场归集 GMV
@@ -117,20 +120,21 @@ public class PaymentService {
         order.setCurrency(currency);
         order.setStatus(OrderStatus.PENDING);
         order = orderRepository.save(order);
-        log.info("[payment] 创建订单 orderId={} userId={} planCode={} channel={} amountCents={} currency={} flavor={}",
-                orderId, cmd.userId(), plan.planCode(), channel, amountCents, currency, cmd.appFlavor());
+        log.info("[payment] 创建订单 orderId={} userId={} productType={} productCode={} channel={} amountCents={} currency={} flavor={}",
+                orderId, cmd.userId(), product.productType(), product.productCode(), channel, amountCents, currency, cmd.appFlavor());
 
         // 4. 调 Provider 创建通道侧订单
         CreateOrderRequest req = new CreateOrderRequest(
                 orderId,
                 cmd.userId(),
-                plan.planCode(),
-                plan.displayName(),
+                product.productType(),
+                product.productCode(),
+                product.productName(),
                 amountCents,
                 currency,
                 cmd.clientPlatform(),
                 cmd.clientIp(),
-                buildAttachJson(cmd.userId(), plan.planCode())
+                buildAttachJson(cmd.userId(), product.productType(), product.productCode())
         );
         CreateOrderResult providerResult = provider.createOrder(req);
 
@@ -222,7 +226,8 @@ public class PaymentService {
         eventPublisher.publishEvent(PaymentSucceededEvent.builder()
                 .orderId(order.getOrderId())
                 .userId(order.getUserId())
-                .planCode(order.getPlanCode())
+                .productType(order.getProductType())
+                .productCode(order.getProductCode())
                 .channel(order.getChannel().name())
                 .amountCents(order.getAmountCents())
                 .currency(order.getCurrency())
@@ -355,16 +360,17 @@ public class PaymentService {
      * 拼接会破坏 JSON 结构甚至构成注入。LinkedHashMap 保证字段顺序稳定，
      * 便于回调日志比对。
      */
-    private String buildAttachJson(Long userId, String planCode) {
-        Map<String, Object> attach = new LinkedHashMap<>(2);
+    private String buildAttachJson(Long userId, String productType, String productCode) {
+        Map<String, Object> attach = new LinkedHashMap<>(3);
         attach.put("userId", userId);
-        attach.put("planCode", planCode);
+        attach.put("productType", productType);
+        attach.put("productCode", productCode);
         try {
             return objectMapper.writeValueAsString(attach);
         } catch (JsonProcessingException e) {
             // 防御性 fallback：理论上 LinkedHashMap<String,Object> 永远不会序列化失败；
             // 真出问题就退化成 userId-only attach，避免阻塞下单主链路。
-            log.error("[payment] 序列化 attach 失败 userId={} planCode={} ", userId, planCode, e);
+            log.error("[payment] 序列化 attach 失败 userId={} productType={} productCode={}", userId, productType, productCode, e);
             return "{\"userId\":" + userId + "}";
         }
     }

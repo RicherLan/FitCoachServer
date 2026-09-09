@@ -40,8 +40,8 @@ public class MockPaymentProvider implements PaymentChannelProvider {
 
     @Override
     public CreateOrderResult createOrder(CreateOrderRequest request) {
-        log.warn("[mock-pay] 开发期 Mock 支付：orderId={} userId={} planCode={} amountCents={}",
-                request.orderId(), request.userId(), request.planCode(), request.amountCents());
+        log.warn("[mock-pay] 开发期 Mock 支付：orderId={} userId={} productCode={} amountCents={}",
+                request.orderId(), request.userId(), request.productCode(), request.amountCents());
 
         Map<String, Object> payload = new HashMap<>();
         payload.put("channel", "MOCK");

@@ -20,9 +20,11 @@ public class PaymentOrderDTO {
 
     private String orderId;
 
-    private String planCode;
+    private String productType;
 
-    private String planSnapshotName;
+    private String productCode;
+
+    private String productName;
 
     private PaymentChannel channel;
 
@@ -49,8 +51,9 @@ public class PaymentOrderDTO {
     public static PaymentOrderDTO from(PaymentOrder o) {
         return PaymentOrderDTO.builder()
                 .orderId(o.getOrderId())
-                .planCode(o.getPlanCode())
-                .planSnapshotName(o.getPlanSnapshotName())
+                .productType(o.getProductType())
+                .productCode(o.getProductCode())
+                .productName(o.getProductName())
                 .channel(o.getChannel())
                 .amountCents(o.getAmountCents())
                 .currency(o.getCurrency())

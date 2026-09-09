@@ -53,8 +53,8 @@ public class AppleIAPProvider implements PaymentChannelProvider {
         //  1. 此方法返回的 clientPayload 主要供客户端确认 plan/amount 显示用，IAP 不需要 prepay_id
         //  2. 客户端拿 result 后用 RN react-native-iap 的 requestSubscription / requestPurchase 自己拉起
         //  3. 客户端拿到 transactionReceipt 调 /api/payment/apple/verify 完成验单 → 切 PAID
-        log.error("[apple-iap] Apple IAP 未接入：orderId={} userId={} planCode={} —— 等待苹果开发者账号申请",
-                request.orderId(), request.userId(), request.planCode());
+        log.error("[apple-iap] Apple IAP 未接入：orderId={} userId={} productCode={} —— 等待苹果开发者账号申请",
+                request.orderId(), request.userId(), request.productCode());
         throw new BusinessException(ResultCode.PAYMENT_PROVIDER_ERROR,
                 "Apple In-App Purchase 即将上线，请耐心等待");
     }

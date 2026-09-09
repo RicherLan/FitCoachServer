@@ -79,7 +79,8 @@ public interface PaymentOrderRepository extends JpaRepository<PaymentOrder, Long
     List<PaymentOrder> findByStatusAndPaidAtAfterOrderByPaidAtAsc(OrderStatus status, LocalDateTime since);
 
     /**
-     * 是否有该套餐的订单（admin 删除套餐时用，有订单则不允许删除）
+     * 是否有该商品的订单（admin 删除商品/套餐时用，有订单则不允许删除）。
+     * <p>去业务化（波 0）：按 productType + productCode 联合查询，替代原 existsByPlanCode。
      */
-    boolean existsByPlanCode(String planCode);
+    boolean existsByProductTypeAndProductCode(String productType, String productCode);
 }

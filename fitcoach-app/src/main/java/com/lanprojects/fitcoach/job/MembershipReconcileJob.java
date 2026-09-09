@@ -1,5 +1,6 @@
 package com.lanprojects.fitcoach.job;
 
+import com.lanprojects.fitcoach.membership.MembershipProductType;
 import com.lanprojects.fitcoach.membership.entity.UserMembership;
 import com.lanprojects.fitcoach.membership.repository.UserMembershipRepository;
 import com.lanprojects.fitcoach.membership.service.MembershipService;
@@ -71,30 +72,34 @@ public class MembershipReconcileJob {
         int suspicious = 0;
         int failed = 0;
         for (PaymentOrder order : recentPaid) {
+            // 去业务化（波 0）：只补偿会员类订单，其它 productType（如未来 COINS）交给各自业务的补偿任务
+            if (!MembershipProductType.MEMBERSHIP.equals(order.getProductType())) {
+                continue;
+            }
             try {
                 ReconcileDecision decision = decide(order);
                 switch (decision) {
                     case OK:
                         break;
                     case AUTO_REPAIR:
-                        log.warn("[membership-reconcile] 自动补激活 orderId={} userId={} planCode={} paidAt={}",
-                                order.getOrderId(), order.getUserId(), order.getPlanCode(), order.getPaidAt());
-                        membershipService.activate(order.getUserId(), order.getPlanCode(), order.getOrderId());
+                        log.warn("[membership-reconcile] 自动补激活 orderId={} userId={} productCode={} paidAt={}",
+                                order.getOrderId(), order.getUserId(), order.getProductCode(), order.getPaidAt());
+                        membershipService.activate(order.getUserId(), order.getProductCode(), order.getOrderId());
                         repaired++;
                         break;
                     case SUSPICIOUS_NEED_HUMAN:
                         // 不自动补：避免对"用户已买多个订单、本订单不是最近一笔"的场景误叠加会员
                         log.error("[membership-reconcile] ⚠️ 检测到可疑未激活订单，需人工核查 " +
-                                        "orderId={} userId={} planCode={} paidAt={}，" +
+                                        "orderId={} userId={} productCode={} paidAt={}，" +
                                         "建议 admin 后台手动激活后再处理",
-                                order.getOrderId(), order.getUserId(), order.getPlanCode(), order.getPaidAt());
+                                order.getOrderId(), order.getUserId(), order.getProductCode(), order.getPaidAt());
                         suspicious++;
                         break;
                 }
             } catch (Exception e) {
                 failed++;
-                log.error("[membership-reconcile] 补偿激活失败 orderId={} userId={} planCode={}",
-                        order.getOrderId(), order.getUserId(), order.getPlanCode(), e);
+                log.error("[membership-reconcile] 补偿激活失败 orderId={} userId={} productCode={}",
+                        order.getOrderId(), order.getUserId(), order.getProductCode(), e);
             }
         }
 

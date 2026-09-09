@@ -163,7 +163,7 @@ public class AdminPaymentOrderController {
                             nullToEmpty(o.getOrderId()),
                             u == null ? "" : nullToEmpty(u.getUid()),
                             u == null ? "" : nullToEmpty(u.getNickname()),
-                            nullToEmpty(o.getPlanSnapshotName()),
+                            nullToEmpty(o.getProductName()),
                             centsToYuan(o.getAmountCents()),
                             nullToEmpty(o.getCurrency()),
                             o.getStatus() == null ? "" : o.getStatus().name(),

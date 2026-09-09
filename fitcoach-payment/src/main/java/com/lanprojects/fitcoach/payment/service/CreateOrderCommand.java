@@ -6,10 +6,11 @@ import com.lanprojects.fitcoach.payment.entity.PaymentChannel;
 /**
  * Controller → PaymentService 的下单参数。
  *
- * <p>Plan 详情由调用方查好后通过 {@link PlanSnapshot} 传入，让 payment 模块不依赖 membership 模块。
+ * <p>商品详情由调用方（业务模块）查好后通过 {@link ProductSnapshot} 传入，让 payment 模块对业务零认知，
+ * 从而可跨 App 复用（去业务化，波 0）。
  *
  * @param userId         下单用户
- * @param plan           套餐快照（调用方从 MembershipService 查到 plan 后转换传入）
+ * @param product        商品快照（调用方从各自业务服务查到商品后转换传入）
  * @param channel        客户端指定通道（可空，为空时由 Router 按 flavor+平台决策）
  * @param clientPlatform 客户端平台（"android" / "ios"，从 ClientContext 取）
  * @param appFlavor      客户端 App Flavor（CN / GLOBAL / null），从 {@link com.lanprojects.fitcoach.common.client.ClientContext#appFlavor()} 取；
@@ -18,7 +19,7 @@ import com.lanprojects.fitcoach.payment.entity.PaymentChannel;
  */
 public record CreateOrderCommand(
         Long userId,
-        PlanSnapshot plan,
+        ProductSnapshot product,
         PaymentChannel channel,
         String clientPlatform,
         AppFlavor appFlavor,
