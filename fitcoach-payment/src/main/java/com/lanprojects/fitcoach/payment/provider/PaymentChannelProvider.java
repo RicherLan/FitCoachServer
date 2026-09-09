@@ -1,5 +1,7 @@
 package com.lanprojects.fitcoach.payment.provider;
 
+import com.lanprojects.fitcoach.common.exception.BusinessException;
+import com.lanprojects.fitcoach.common.model.ResultCode;
 import com.lanprojects.fitcoach.payment.entity.PaymentChannel;
 
 /**
@@ -41,4 +43,24 @@ public interface PaymentChannelProvider {
      * </ul>
      */
     CreateOrderResult createOrder(CreateOrderRequest request);
+
+    /**
+     * 该通道是否支持商户主动退款（ACTIVE 模式）。
+     * <p>默认 false —— 只有微信 / 支付宝 / Google Play / Stripe 这类可调 API 主动退款的通道返回 true；
+     * Apple IAP 等只能由用户向平台申请退款（PASSIVE 模式）的通道保持 false。
+     */
+    default boolean supportsActiveRefund() {
+        return false;
+    }
+
+    /**
+     * 主动退款（ACTIVE 模式）—— 调用通道退款 API 把钱原路退回。
+     * <p>默认抛 {@link ResultCode#REFUND_NOT_SUPPORTED}；支持主动退款的 Provider 覆写此方法。
+     * <p>实现约定：把 {@link RefundRequest#refundNo()} 作为通道侧 out_refund_no（保证退款回调能反查）；
+     * 对外异常统一包装为 {@code BusinessException(REFUND_PROVIDER_ERROR)}，附详细 cause。
+     */
+    default RefundResult refund(RefundRequest request) {
+        throw new BusinessException(ResultCode.REFUND_NOT_SUPPORTED,
+                "通道 " + channel() + " 不支持主动退款");
+    }
 }

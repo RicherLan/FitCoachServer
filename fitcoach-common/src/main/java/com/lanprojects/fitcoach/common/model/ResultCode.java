@@ -263,6 +263,19 @@ public enum ResultCode {
      */
     PAYMENT_CHANNEL_NOT_ALLOWED_FOR_FLAVOR(8114, "当前 App 版本不支持该支付通道", "payment.channel_not_allowed_for_flavor"),
 
+    // ====== 退款 8115-8129（fitcoach-payment · RefundService，波 1） ======
+    // 退款主要由 admin 后台触发（不做 i18n），故 i18nKey 仅登记、properties 暂不强制补齐（fallback zh-CN）。
+    /** 该支付通道不支持商户主动退款（如 Apple IAP 只能用户向 Apple 申请，走被动通知模式） */
+    REFUND_NOT_SUPPORTED(8115, "该支付通道不支持主动退款", "payment.refund_not_supported"),
+    /** 本次退款金额 + 已成功退款金额 超过订单原额 */
+    REFUND_EXCEEDS_ORDER(8116, "退款金额超过订单可退余额", "payment.refund_exceeds_order"),
+    /** 订单状态不允许退款（仅 PAID 可退） */
+    REFUND_ORDER_NOT_REFUNDABLE(8117, "订单当前状态不允许退款", "payment.refund_order_not_refundable"),
+    /** 通道退款接口调用失败 */
+    REFUND_PROVIDER_ERROR(8118, "退款通道服务异常，请稍后重试", "payment.refund_provider_error"),
+    /** 退款金额非法（≤ 0） */
+    REFUND_AMOUNT_INVALID(8119, "退款金额必须大于 0", "payment.refund_amount_invalid"),
+
     // ====== 训练动作库 8201-8299（fitcoach-training-record · TrainingExercise，用户手动录入的动作字典） ======
     // 与 fitcoach-exercise 的 EXERCISE（AI 实时识别动作，7501 段）完全独立 —— 两个领域的 key 允许重名。
     TRAINING_EXERCISE_NOT_FOUND(8201, "训练动作不存在", "training_exercise.not_found"),

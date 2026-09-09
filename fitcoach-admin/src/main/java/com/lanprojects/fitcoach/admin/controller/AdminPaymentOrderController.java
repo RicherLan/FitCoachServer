@@ -16,6 +16,7 @@ import com.lanprojects.fitcoach.login.repository.UserRepository;
 import com.lanprojects.fitcoach.payment.entity.OrderStatus;
 import com.lanprojects.fitcoach.payment.entity.PaymentOrder;
 import com.lanprojects.fitcoach.payment.service.PaymentService;
+import com.lanprojects.fitcoach.payment.service.RefundService;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
@@ -59,6 +60,7 @@ public class AdminPaymentOrderController {
     private static final DateTimeFormatter ISO_FMT = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss");
 
     private final PaymentService paymentService;
+    private final RefundService refundService;
     private final UserRepository userRepository;
     private final AdminAuditLogService auditLogService;
 
@@ -113,8 +115,13 @@ public class AdminPaymentOrderController {
         String operator = (String) request.getAttribute(AdminAuthInterceptor.ATTR_ADMIN_USERNAME);
         // P1-18：先尝试退款；成功落审计，失败也落 FAILED 审计便于事后追溯
         try {
-            PaymentOrder updated = paymentService.adminMarkRefunded(orderId, body.getRefundCents(), body.getReason());
-            log.info("[admin] {} 给订单 {} 标记退款（amount={}, reason={}）",
+            // 波 1：走 RefundService 统一编排（ACTIVE 调通道 API 原路退 / PASSIVE 记账+撤权益），
+            // 替代原 adminMarkRefunded 的"仅记账"。退款成功会发 PaymentRefundedEvent，membership 自动撤会员。
+            refundService.refund(orderId, body.getRefundCents(), body.getReason(),
+                    operator != null ? operator : "admin");
+            PaymentOrder updated = paymentService.findByOrderId(orderId)
+                    .orElseThrow(() -> new BusinessException(ResultCode.PAYMENT_ORDER_NOT_FOUND));
+            log.info("[admin] {} 给订单 {} 退款（amount={}, reason={}）",
                     operator, orderId, body.getRefundCents(), body.getReason());
             String summary = String.format("refund cents=%s, reason=%s",
                     body.getRefundCents() == null ? "FULL" : body.getRefundCents(),

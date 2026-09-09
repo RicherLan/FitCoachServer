@@ -1,6 +1,7 @@
 package com.lanprojects.fitcoach.membership.service;
 
 import com.lanprojects.fitcoach.common.cache.CacheNames;
+import com.lanprojects.fitcoach.common.event.PaymentRefundedEvent;
 import com.lanprojects.fitcoach.common.event.PaymentSucceededEvent;
 import com.lanprojects.fitcoach.common.exception.BusinessException;
 import com.lanprojects.fitcoach.common.model.ResultCode;
@@ -190,6 +191,37 @@ public class MembershipService {
                 log.error("[membership] 写入 activation_failure 记录也失败 orderId={}",
                         event.getOrderId(), persistEx);
             }
+        }
+    }
+
+    /**
+     * 监听退款成功事件，撤销 / 处理会员（波 1）。
+     *
+     * <p>与 {@link #onPaymentSucceeded} 对称的去业务化范式：只认领 {@code productType=MEMBERSHIP}。
+     * <ul>
+     *   <li>全额退款 → 撤销会员（立即失效）；</li>
+     *   <li>部分退款 → MVP 保留会员不处理（仅 payment 侧记账），未来可按退款比例扣减到期时间。</li>
+     * </ul>
+     * <p>幂等：{@link #revoke} 本身幂等（重复撤销只是再次把 expiresAt 前移）。异常不外抛（AFTER_COMMIT 已提交）。
+     */
+    @Async
+    @TransactionalEventListener(phase = TransactionPhase.AFTER_COMMIT, classes = PaymentRefundedEvent.class)
+    public void onPaymentRefunded(PaymentRefundedEvent event) {
+        if (!MembershipProductType.MEMBERSHIP.equals(event.getProductType())) {
+            return;
+        }
+        try {
+            if (event.isFullyRefunded()) {
+                revoke(event.getUserId());
+                log.info("[membership] 全额退款已撤销会员 userId={} orderId={} refundNo={}",
+                        event.getUserId(), event.getOrderId(), event.getRefundNo());
+            } else {
+                log.info("[membership] 部分退款 MVP 保留会员不处理 userId={} orderId={} refundCents={}",
+                        event.getUserId(), event.getOrderId(), event.getRefundCents());
+            }
+        } catch (Exception e) {
+            log.error("[membership] 退款处理会员失败 userId={} orderId={}",
+                    event.getUserId(), event.getOrderId(), e);
         }
     }
 
