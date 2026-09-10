@@ -171,6 +171,9 @@ services:
       # MIGO FIT 官方网站（独立仓库 fitcoach-website 部署的静态站，root /）
       # 维护：bash shell/deploy-website.sh （首次 init / 后续直接 pull）
       - ${WEBSITE_DIR:-/data/fitcoach/website}:/usr/share/nginx/website:ro
+      # FitCoachAdminManager 管理后台静态站（子域名 admin.migofitai.com，见 nginx/fitcoach.conf 的 admin server 块）
+      # 维护：本地 npm run build → rsync dist/ 到 ${ADMIN_DIST_DIR}（见 FitCoachAdminManager/doc/部署文档.md）
+      - ${ADMIN_DIST_DIR:-/data/fitcoach/admin}:/usr/share/nginx/admin:ro
       # certbot webroot 验证目录（自动续期时用，certbot 把验证文件写到宿主机目录，
       # nginx 通过 /.well-known/acme-challenge/ 提供给 Let's Encrypt 服务器验证）
       - ${CERTBOT_WEBROOT:-/data/fitcoach/certbot}:/usr/share/nginx/certbot:ro
