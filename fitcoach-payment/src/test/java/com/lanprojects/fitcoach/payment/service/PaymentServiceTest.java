@@ -16,7 +16,7 @@ class PaymentServiceTest {
         var service = new PaymentService(repo, mock(PaymentChannelRouter.class), publisher);
         var order = new PaymentOrder();
         order.setOrderId("order"); order.setAmountCents(9900); order.setChannel(PaymentChannel.WECHAT);
-        when(repo.findByOrderId("order")).thenReturn(Optional.of(order));
+        when(repo.findLockedByOrderId("order")).thenReturn(Optional.of(order));
         assertThrows(BusinessException.class, () -> service.markPaid("order", null, "txn", 9901L));
         assertEquals(OrderStatus.PENDING, order.getStatus());
         service.markPaid("order", null, "txn", 9900L);

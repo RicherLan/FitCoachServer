@@ -201,7 +201,7 @@ public class PaymentService {
     @Transactional
     public void markPaid(String orderId, String channelPrepayId, String channelTransactionId,
                           Long paidAmountCents) {
-        PaymentOrder order = orderRepository.findByOrderId(orderId)
+        PaymentOrder order = orderRepository.findLockedByOrderId(orderId)
                 .orElseThrow(() -> new BusinessException(ResultCode.PAYMENT_ORDER_NOT_FOUND));
 
         if (order.getStatus() == OrderStatus.PAID) {
