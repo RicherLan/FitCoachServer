@@ -22,6 +22,9 @@ class PaymentServiceTest {
         service.markPaid("order", null, "txn", 9900L);
         assertEquals(OrderStatus.PAID, order.getStatus());
         service.markPaid("order", null, "txn", 9900L);
+        service.closeOrder("order", "expired job observed an old pending snapshot");
+        assertEquals(OrderStatus.PAID, order.getStatus());
+        verify(repo, times(4)).findLockedByOrderId("order");
         verify(publisher, times(1)).publishEvent(any(Object.class));
     }
 }

@@ -248,7 +248,7 @@ public class PaymentService {
      */
     @Transactional
     public void closeOrder(String orderId, String reason) {
-        PaymentOrder order = orderRepository.findByOrderId(orderId)
+        PaymentOrder order = orderRepository.findLockedByOrderId(orderId)
                 .orElseThrow(() -> new BusinessException(ResultCode.PAYMENT_ORDER_NOT_FOUND));
         if (order.getStatus() != OrderStatus.PENDING) {
             // 已支付/已关闭都直接返回，幂等
