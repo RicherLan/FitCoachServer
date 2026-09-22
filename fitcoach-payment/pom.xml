@@ -19,6 +19,11 @@
     </description>
 
     <dependencies>
+        <dependency>
+            <groupId>com.apple.itunes.storekit</groupId>
+            <artifactId>app-store-server-library</artifactId>
+            <version>5.2.0</version>
+        </dependency>
         <!-- 通用依赖（含支付事件类 PaymentSucceededEvent） -->
         <dependency>
             <groupId>com.lanprojects</groupId>

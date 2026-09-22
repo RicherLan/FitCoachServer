@@ -17,6 +17,10 @@ public interface PaymentOrderRepository extends JpaRepository<PaymentOrder, Long
 
     Optional<PaymentOrder> findByOrderId(String orderId);
 
+    @org.springframework.data.jpa.repository.Lock(jakarta.persistence.LockModeType.PESSIMISTIC_WRITE)
+    @Query("select o from PaymentOrder o where o.orderId = :orderId")
+    Optional<PaymentOrder> findLockedByOrderId(String orderId);
+
     /** 按通道凭证号查（回调里确认订单时用） */
     Optional<PaymentOrder> findByChannelAndChannelTransactionId(PaymentChannel channel, String channelTransactionId);
 

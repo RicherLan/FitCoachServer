@@ -47,11 +47,15 @@ public class AppleIAPProvider implements PaymentChannelProvider {
             return false;
         }
         return notBlank(sysConfigService.getValue(PaymentConfigKeys.APPLE_BUNDLE_ID))
-                && notBlank(sysConfigService.getValue(PaymentConfigKeys.APPLE_SHARED_SECRET));
+                && notBlank(sysConfigService.getValue(PaymentConfigKeys.APPLE_ROOT_CERTIFICATES))
+                && (sysConfigService.getBoolValue(PaymentConfigKeys.APPLE_SANDBOX, false)
+                    || notBlank(sysConfigService.getValue(PaymentConfigKeys.APPLE_APP_ID)));
     }
 
     @Override
     public CreateOrderResult createOrder(CreateOrderRequest request) {
+        String productId = sysConfigService.getValue(PaymentConfigKeys.APPLE_PRODUCT_PREFIX + request.productCode());
+        if (!notBlank(productId)) { throw new BusinessException(ResultCode.PAYMENT_CONFIG_MISSING, "Apple 商品映射未配置"); }
         // IAP 是「客户端发起 + 服务端验单」模式（与微信「服务端统一下单」不同）：
         //   1. createOrder 仅占位 PENDING 订单（PaymentService 已落库），返回 productCode 供客户端映射 appleProductId；
         //   2. 客户端用 StoreKit / react-native-iap 拉起购买，拿到 signedTransaction(JWS)；
@@ -63,6 +67,8 @@ public class AppleIAPProvider implements PaymentChannelProvider {
         payload.put("channel", "APPLE_IAP");
         payload.put("orderId", request.orderId());
         payload.put("productCode", request.productCode());
+        payload.put("productId", productId);
+        payload.put("appAccountToken", AppleSignedDataVerifier.accountToken(request.orderId()).toString());
         payload.put("amountCents", request.amountCents());
         payload.put("currency", request.currency());
         payload.put("message", "请在客户端通过 App Store 完成购买后调用 /api/payment/apple/verify 验单");

@@ -137,6 +137,11 @@ public class PaymentService {
                 buildAttachJson(cmd.userId(), product.productType(), product.productCode())
         );
         CreateOrderResult providerResult = provider.createOrder(req);
+        if (channel == PaymentChannel.APPLE_IAP) {
+            try { order.setExtraJson(objectMapper.writeValueAsString(providerResult.clientPayload())); }
+            catch (Exception e) { throw new BusinessException(ResultCode.PAYMENT_PROVIDER_ERROR); }
+            orderRepository.save(order);
+        }
 
         // 5. 更新订单 prepayId
         if (providerResult.prepayId() != null) {
@@ -209,7 +214,7 @@ public class PaymentService {
         }
 
         // 金额校验（仅当通道回传金额时才校验，Mock 场景透传 null 跳过）
-        if (paidAmountCents != null && !paidAmountCents.equals(order.getAmountCents())) {
+        if (paidAmountCents != null && paidAmountCents.longValue() != order.getAmountCents().longValue()) {
             log.error("[payment] ⚠️ 订单金额校验失败！orderId={} expectedCents={} paidCents={} channel={}" +
                             " — 拒绝标记支付，订单保持 PENDING 等待人工核查",
                     orderId, order.getAmountCents(), paidAmountCents, order.getChannel());

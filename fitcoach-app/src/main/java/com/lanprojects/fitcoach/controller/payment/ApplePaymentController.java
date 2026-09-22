@@ -41,7 +41,7 @@ public class ApplePaymentController {
             @RequestBody AppleVerifyRequest req) {
         Long userId = auth.requireUserId(authorization);
         log.info("[apple-iap] 收到验单请求 userId={} orderId={}", userId, req.getOrderId());
-        appleIapService.verifyAndComplete(req.getOrderId(), req.getSignedTransaction());
+        appleIapService.verifyAndComplete(userId, req.getOrderId(), req.getSignedTransaction());
         return Result.success();
     }
 
@@ -52,13 +52,14 @@ public class ApplePaymentController {
      * 处理异常也返回 200，避免 Apple 无限重试（失败靠后续对账兜底）。
      */
     @PostMapping("/api/payment/notify/apple")
-    public Map<String, String> serverNotification(@RequestBody Map<String, String> body) {
+    public org.springframework.http.ResponseEntity<Map<String, String>> serverNotification(@RequestBody Map<String, String> body) {
         String signedPayload = body == null ? null : body.get("signedPayload");
         try {
             appleIapService.handleServerNotification(signedPayload);
         } catch (Exception e) {
             log.error("[apple-iap] ASSN 处理异常", e);
+            return org.springframework.http.ResponseEntity.status(503).body(Map.of("code", "RETRY"));
         }
-        return Map.of("code", "SUCCESS");
+        return org.springframework.http.ResponseEntity.ok(Map.of("code", "SUCCESS"));
     }
 }

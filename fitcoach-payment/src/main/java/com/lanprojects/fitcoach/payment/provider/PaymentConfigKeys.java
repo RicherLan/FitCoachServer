@@ -50,6 +50,9 @@ public final class PaymentConfigKeys {
     public static final String APPLE_SHARED_SECRET = "payment.apple.sharedSecret";
     /** 是否走 sandbox 环境（开发/审核时 true） */
     public static final String APPLE_SANDBOX = "payment.apple.sandbox";
+    public static final String APPLE_APP_ID = "payment.apple.appAppleId";
+    public static final String APPLE_ROOT_CERTIFICATES = "payment.apple.rootCertificatesPem";
+    public static final String APPLE_PRODUCT_PREFIX = "payment.apple.productId.";
 
     // ====== Google Play Billing（波 4） ======
 
