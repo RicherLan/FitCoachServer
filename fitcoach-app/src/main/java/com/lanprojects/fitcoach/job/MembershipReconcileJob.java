@@ -44,6 +44,7 @@ public class MembershipReconcileJob {
     private final PaymentOrderRepository paymentOrderRepository;
     private final UserMembershipRepository userMembershipRepository;
     private final MembershipService membershipService;
+    private final com.lanprojects.fitcoach.membership.repository.MembershipEntitlementRepository entitlements;
 
     /**
      * 扫描窗口（小时）：扫最近 2 小时的 PAID 订单。
@@ -121,6 +122,11 @@ public class MembershipReconcileJob {
      * </ul>
      */
     private ReconcileDecision decide(PaymentOrder order) {
+        var entry = entitlements.findByOrderId(order.getOrderId());
+        if (entry.isPresent()) {
+            return entry.get().isRevoked() || entry.get().getGrantedAt() != null
+                    ? ReconcileDecision.OK : ReconcileDecision.AUTO_REPAIR;
+        }
         Optional<UserMembership> membership = userMembershipRepository.findByUserId(order.getUserId());
 
         if (membership.isEmpty()) {

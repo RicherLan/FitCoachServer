@@ -54,6 +54,11 @@ public class MembershipService {
     private final MembershipPlanRepository planRepository;
     private final UserMembershipRepository membershipRepository;
     private final MembershipActivationFailureRepository activationFailureRepository;
+    private final MembershipEntitlementService entitlements;
+
+    public void reserveOrder(Long userId, MembershipPlan plan, String orderId) {
+        entitlements.reserve(userId, plan, orderId);
+    }
 
     /** 首次失败后多久重试（毫秒） — 后续重试按指数退避 */
     private static final long INITIAL_BACKOFF_MS = 60_000L; // 1 分钟
@@ -212,7 +217,7 @@ public class MembershipService {
         }
         try {
             if (event.isFullyRefunded()) {
-                revoke(event.getUserId());
+                entitlements.refund(event.getUserId(), event.getOrderId());
                 log.info("[membership] 全额退款已撤销会员 userId={} orderId={} refundNo={}",
                         event.getUserId(), event.getOrderId(), event.getRefundNo());
             } else {
@@ -339,11 +344,7 @@ public class MembershipService {
      */
     @Transactional
     public void revoke(Long userId) {
-        membershipRepository.findByUserId(userId).ifPresent(m -> {
-            m.setExpiresAt(LocalDateTime.now().minusSeconds(1));
-            membershipRepository.save(m);
-            log.info("[membership] 撤销会员 userId={} 原 expiresAt={}", userId, m.getExpiresAt());
-        });
+        entitlements.revokeAll(userId);
     }
 
     // ====== Admin 套餐 CRUD ======
@@ -419,33 +420,6 @@ public class MembershipService {
      * <p>幂等：相同 orderId 重复调用只激活一次（短路返回现有记录）。
      */
     private UserMembership upsertMembership(Long userId, MembershipPlan plan, int days, String orderId) {
-        Optional<UserMembership> existing = membershipRepository.findByUserId(userId);
-
-        if (existing.isPresent() && orderId != null && orderId.equals(existing.get().getLastOrderId())) {
-            log.info("[membership] 幂等：orderId={} 已激活过，跳过 userId={}", orderId, userId);
-            return existing.get();
-        }
-
-        LocalDateTime now = LocalDateTime.now();
-        UserMembership membership = existing.orElseGet(UserMembership::new);
-
-        if (existing.isEmpty() || !existing.get().isActive()) {
-            // 首次开通 / 重新开通（已过期）
-            membership.setActivatedAt(now);
-            membership.setExpiresAt(now.plusDays(days));
-        } else {
-            // 续费：从原到期时间往后叠加
-            membership.setExpiresAt(existing.get().getExpiresAt().plusDays(days));
-        }
-        membership.setUserId(userId);
-        membership.setPlanId(plan.getId());
-        membership.setPlanCode(plan.getPlanCode());
-        membership.setLastOrderId(orderId);
-        // autoRenewEnabled 保持现状（MVP 始终 false）
-
-        UserMembership saved = membershipRepository.save(membership);
-        log.info("[membership] 激活/续费 userId={} planCode={} expiresAt={} orderId={}",
-                userId, plan.getPlanCode(), saved.getExpiresAt(), orderId);
-        return saved;
+        return entitlements.grant(userId, plan, days, orderId);
     }
 }

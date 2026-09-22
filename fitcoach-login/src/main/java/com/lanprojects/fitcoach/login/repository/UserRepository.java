@@ -17,6 +17,10 @@ public interface UserRepository
 
     Optional<User> findByUid(String uid);
 
+    @org.springframework.data.jpa.repository.Lock(jakarta.persistence.LockModeType.PESSIMISTIC_WRITE)
+    @org.springframework.data.jpa.repository.Query("select u from User u where u.id = :id")
+    Optional<User> findLockedById(Long id);
+
     /** 批量按 uid 查询（admin 后台反馈列表回填昵称用，避免 N+1） */
     List<User> findByUidIn(Collection<String> uids);
 

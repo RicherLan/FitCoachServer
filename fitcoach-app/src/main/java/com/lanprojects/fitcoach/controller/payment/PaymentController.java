@@ -67,6 +67,7 @@ public class PaymentController {
      * </ol>
      */
     @PostMapping("/order")
+    @org.springframework.transaction.annotation.Transactional
     public Result<CreateOrderResponse> createOrder(
             @RequestHeader(value = "Authorization", required = false) String authorization,
             @Valid @RequestBody CreateOrderRequest req,
@@ -96,6 +97,7 @@ public class PaymentController {
         // 3. 下单
         PaymentService.CreateOrderResponse svcResp = paymentService.createOrder(
                 new CreateOrderCommand(userId, snapshot, req.getChannel(), platform, appFlavor, clientIp));
+        membershipService.reserveOrder(userId, plan, svcResp.orderId());
 
         return Result.success(CreateOrderResponse.builder()
                 .orderId(svcResp.orderId())
