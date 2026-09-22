@@ -50,6 +50,16 @@ public class TrainingRecordService {
 
     // ====== 查询 ======
 
+    public record AiHistoryItem(Long id, String clientId, LocalDate date,
+                                com.lanprojects.fitcoach.trainingrecord.dto.AiTrainingSummary aiSummary) {}
+
+    @Transactional(readOnly = true)
+    public List<AiHistoryItem> aiHistory(Long userId, String exerciseKey) {
+        return trainingRecordRepository.findByUserIdAndAiExerciseKeyOrderByDateDescIdDesc(
+                userId, exerciseKey, PageRequest.of(0, 20)).stream()
+                .map(r -> new AiHistoryItem(r.getId(), r.getClientId(), r.getDate(), r.getAiSummary())).toList();
+    }
+
     /** 用户列表分页（按 date desc） */
     @Transactional(readOnly = true)
     public Page<TrainingRecord> pageByUser(Long userId, int page, int size) {
@@ -140,6 +150,8 @@ public class TrainingRecordService {
         record.setEndedAt(req.getEndedAt());
         record.setDurationMin(resolveDuration(req.getDurationMin(), req.getStartedAt(), req.getEndedAt()));
         record.setNote(req.getNote());
+        record.setAiSummary(req.getAiSummary());
+        record.setAiExerciseKey(req.getAiSummary() == null ? null : req.getAiSummary().getExerciseKey());
 
         // 子表：删后插（保留 orphanRemoval 处理旧 exercises 删除）
         record.getExercises().clear();

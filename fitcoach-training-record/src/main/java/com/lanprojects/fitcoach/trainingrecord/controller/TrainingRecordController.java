@@ -54,6 +54,12 @@ import org.springframework.web.bind.annotation.RestController;
 @RequestMapping("/api/training-record")
 @RequiredArgsConstructor
 public class TrainingRecordController {
+    @GetMapping("/ai-history")
+    public Result<java.util.List<TrainingRecordService.AiHistoryItem>> aiHistory(
+            @RequestHeader(value = "Authorization", required = false) String authorization,
+            @RequestParam String exerciseKey) {
+        return Result.success(trainingRecordService.aiHistory(auth.requireUserId(authorization), exerciseKey));
+    }
 
     private final TrainingRecordService trainingRecordService;
     private final AuthSupport auth;

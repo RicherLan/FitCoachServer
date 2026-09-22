@@ -25,6 +25,7 @@ import java.util.Optional;
  * 没必要单独写 Repository（按 record id 查走 entity.exercises 即可，已有 @OrderBy）。
  */
 public interface TrainingRecordRepository extends JpaRepository<TrainingRecord, Long> {
+    List<TrainingRecord> findByUserIdAndAiExerciseKeyOrderByDateDescIdDesc(Long userId, String exerciseKey, Pageable page);
 
     /** 幂等查询：同一用户的相同 clientId 只会有一条 */
     Optional<TrainingRecord> findByUserIdAndClientId(Long userId, String clientId);

@@ -39,6 +39,10 @@ public class TrainingExerciseSeeder implements CommandLineRunner {
     @Override
     public void run(String... args) {
         int inserted = 0;
+        inserted += ensure("SQUAT", "自重深蹲", "💪", "LEGS", "BODYWEIGHT", "AI训练记录", 200);
+        inserted += ensure("WIDE_PUSH_UP", "宽距俯卧撑", "💪", "CHEST", "BODYWEIGHT", "AI训练记录", 201);
+        inserted += ensure("LUNGE", "箭步蹲", "💪", "LEGS", "BODYWEIGHT", "AI训练记录", 202);
+
 
         // ============ 有氧 CARDIO · 8 个（放在最前面）============
         // 业务约定：有氧入门门槛最低、记录频率最高，用户打开"+ 记录"选择器时优先看到。

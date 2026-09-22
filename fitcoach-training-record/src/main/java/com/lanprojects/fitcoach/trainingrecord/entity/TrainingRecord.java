@@ -55,6 +55,12 @@ import java.util.List;
         @Index(name = "idx_training_record_user_created", columnList = "user_id, created_at")
 })
 public class TrainingRecord extends BaseEntity {
+    @jakarta.persistence.Convert(converter = AiTrainingSummaryConverter.class)
+    @Column(name = "ai_summary_json", columnDefinition = "MEDIUMTEXT")
+    private com.lanprojects.fitcoach.trainingrecord.dto.AiTrainingSummary aiSummary;
+
+    @Column(name = "ai_exercise_key", length = 64)
+    private String aiExerciseKey;
 
     /**
      * 客户端幂等标识（UUID 字符串）。

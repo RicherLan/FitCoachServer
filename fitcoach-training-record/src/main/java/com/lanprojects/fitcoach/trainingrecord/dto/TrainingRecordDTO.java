@@ -23,6 +23,7 @@ import java.util.List;
 @Data
 @Builder
 public class TrainingRecordDTO {
+    private AiTrainingSummary aiSummary;
 
     /** 服务端内部 id（删除 / 更新接口要用） */
     private Long id;
@@ -53,6 +54,7 @@ public class TrainingRecordDTO {
 
     public static TrainingRecordDTO from(TrainingRecord r) {
         return TrainingRecordDTO.builder()
+                .aiSummary(r.getAiSummary())
                 .id(r.getId())
                 .clientId(r.getClientId())
                 .date(r.getDate())

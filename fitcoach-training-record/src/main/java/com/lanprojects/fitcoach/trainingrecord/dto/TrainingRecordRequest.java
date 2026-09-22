@@ -28,6 +28,8 @@ import java.util.List;
  */
 @Data
 public class TrainingRecordRequest {
+    @Valid
+    private AiTrainingSummary aiSummary;
 
     /**
      * 客户端幂等标识。重试 / 离线队列重发时保持一致；同 userId 重复提交会更新原记录。
@@ -61,6 +63,32 @@ public class TrainingRecordRequest {
     @NotEmpty(message = "至少添加一个训练动作")
     @Valid
     private List<ExerciseItem> exercises;
+
+    /** AI 数值是客户端测量；这里只校验摘要与用户最终确认的日志一致。 */
+    @com.fasterxml.jackson.annotation.JsonIgnore
+    @jakarta.validation.constraints.AssertTrue(message = "AI摘要与训练组记录不一致")
+    public boolean isAiSummaryConsistent() {
+        if (aiSummary == null) return true;
+        if (exercises == null || exercises.size() != 1 || exercises.get(0) == null
+                || aiSummary.getExerciseKey() == null || aiSummary.getSets() == null) return false;
+        String recordKey = switch (aiSummary.getExerciseKey()) {
+            case "BICEP_CURL" -> "DUMBBELL_CURL";
+            case "LATERAL_RAISE" -> "DUMBBELL_LATERAL_RAISE";
+            case "BENT_OVER_ROW" -> "DUMBBELL_ROW";
+            case "OVERHEAD_TRICEP_EXTENSION" -> "OVERHEAD_DUMBBELL_EXTENSION";
+            default -> aiSummary.getExerciseKey();
+        };
+        ExerciseItem exercise = exercises.get(0);
+        if (!recordKey.equals(exercise.getExerciseKey()) || exercise.getSets() == null
+                || exercise.getSets().size() != aiSummary.getSets().size()) return false;
+        for (int i = 0; i < exercise.getSets().size(); i++) {
+            var set = exercise.getSets().get(i);
+            var aiSet = aiSummary.getSets().get(i);
+            if (set == null || aiSet == null || set.getReps() == null
+                    || set.getReps() != aiSet.getConfirmedReps()) return false;
+        }
+        return true;
+    }
 
     /** 单个动作条目 */
     @Data
