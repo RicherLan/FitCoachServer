@@ -170,7 +170,7 @@ public class WeChatCallbackHandler {
      *
      * <p>回调 event_type：REFUND.SUCCESS / REFUND.ABNORMAL / REFUND.CLOSED；
      * 解密后 resource 含 out_refund_no / refund_id / refund_status。
-     * 仅 REFUND.SUCCESS + refund_status=SUCCESS 时调 {@link RefundService#completeByChannelRefundId}
+     * 仅 REFUND.SUCCESS + refund_status=SUCCESS 时按商户退款号确认。
      * 把退款单置完成（内部幂等）。
      *
      * @return true 表示已处理（返回 SUCCESS ack，微信不再重试）
@@ -216,7 +216,12 @@ public class WeChatCallbackHandler {
                     outRefundNo, refundId, refundStatus);
 
             if ("REFUND.SUCCESS".equals(eventType) && "SUCCESS".equals(refundStatus) && refundId != null) {
-                refundService.completeByChannelRefundId(refundId, decryptedJson);
+                Object amountObject = refund.get("amount");
+                if (!(amountObject instanceof Map<?, ?> amounts) || !(amounts.get("refund") instanceof Number amount)) {
+                    return false;
+                }
+                refundService.completeByRefundNo(outRefundNo, refundId, (String) refund.get("out_trade_no"),
+                        amount.longValue(), decryptedJson);
             } else {
                 log.warn("[wechat-refund] 退款未成功或非 SUCCESS 事件，忽略 eventType={} refundStatus={}",
                         eventType, refundStatus);

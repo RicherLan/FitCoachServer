@@ -64,6 +64,31 @@ public class AdminPaymentOrderController {
     private final UserRepository userRepository;
     private final AdminAuditLogService auditLogService;
 
+    public record RefundDto(String refundNo, Integer amountCents, String status, String reason,
+                            String failReason, java.time.LocalDateTime createdAt) {}
+
+    @GetMapping("/{orderId}/refunds")
+    public Result<List<RefundDto>> refunds(@PathVariable String orderId) {
+        return Result.success(refundService.listByOrderId(orderId).stream().map(r -> new RefundDto(
+                r.getRefundNo(), r.getAmountCents(), r.getStatus().name(), r.getReason(),
+                r.getFailReason(), r.getCreatedAt())).toList());
+    }
+
+    @PostMapping("/{orderId}/refunds/{refundNo}/retry")
+    public Result<Void> retryRefund(@PathVariable String orderId, @PathVariable String refundNo,
+                                     HttpServletRequest request) {
+        try {
+            refundService.retryPending(orderId, refundNo);
+            auditLogService.logSuccess(request, AdminAuditAction.REFUND_ORDER, "ORDER", orderId,
+                    "retry refundNo=" + refundNo);
+            return Result.success();
+        } catch (RuntimeException e) {
+            auditLogService.logFailure(request, AdminAuditAction.REFUND_ORDER, "ORDER", orderId,
+                    "retry refundNo=" + refundNo, e.getMessage());
+            throw e;
+        }
+    }
+
     /**
      * 订单分页（按创建时间倒序）。可选 status / flavor 过滤。
      *

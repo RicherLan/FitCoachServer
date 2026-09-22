@@ -213,6 +213,9 @@ public class WeChatPaymentProvider implements PaymentChannelProvider {
             if (status < 200 || status >= 300) {
                 log.error("[wechat-refund] 退款失败 refundNo={} status={} body={}",
                         request.refundNo(), status, respBody);
+                if (status >= 400 && status < 500 && status != 409 && status != 429) {
+                    return new RefundResult(null, false, false, respBody);
+                }
                 throw new BusinessException(ResultCode.REFUND_PROVIDER_ERROR,
                         "微信退款失败：" + parseWechatErrorMessage(respBody));
             }
