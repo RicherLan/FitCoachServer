@@ -192,7 +192,7 @@ public final class WeChatPayV3Helper {
         try {
             long callbackTs = Long.parseLong(timestamp);
             long nowTs = System.currentTimeMillis() / 1000;
-            if (Math.abs(nowTs - callbackTs) > 300) {
+            if (callbackTs < nowTs - 300 || callbackTs > nowTs + 300) {
                 log.error("[wechat-pay] 验签失败：时间戳偏差超过 5 分钟 callbackTs={} nowTs={}",
                         callbackTs, nowTs);
                 return false;

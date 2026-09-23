@@ -40,6 +40,10 @@ public final class PaymentConfigKeys {
     /** 开发模式：跳过微信回调签名校验（默认 false，生产环境严禁开启） */
     public static final String WECHAT_SKIP_CALLBACK_SIGNATURE = "payment.wechat.skipCallbackSignature";
 
+    /** 新商户推荐的微信支付公钥模式；与商户API私钥/证书序列号不是同一套材料。 */
+    public static final String WECHAT_PUBLIC_KEY_ID = "payment.wechat.publicKeyId";
+    public static final String WECHAT_PUBLIC_KEY_PEM = "payment.wechat.publicKeyPem";
+
     // ====== Apple IAP ======
 
     /** Apple IAP 总开关 */

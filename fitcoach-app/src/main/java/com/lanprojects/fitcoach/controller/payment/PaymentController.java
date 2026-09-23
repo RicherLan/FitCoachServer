@@ -25,8 +25,10 @@ import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
 import org.springframework.web.bind.annotation.*;
 
-import java.util.HashMap;
 import java.util.Map;
+import java.util.HashMap;
+import org.springframework.http.ResponseEntity;
+import com.lanprojects.fitcoach.payment.provider.wechat.WeChatOrderSyncService;
 
 /**
  * 支付控制器（用户端） — 编排 membership + payment 两个领域服务。
@@ -51,6 +53,7 @@ public class PaymentController {
     private final PaymentService paymentService;
     private final WeChatCallbackHandler weChatCallbackHandler;
     private final AuthSupport auth;
+    private final WeChatOrderSyncService weChatOrderSync;
 
     // ====== 创建订单 ======
 
@@ -120,7 +123,8 @@ public class PaymentController {
             @PathVariable("orderId") String orderId) {
         Long userId = auth.requireUserId(authorization);
         PaymentOrder order = paymentService.requireOrderForUser(orderId, userId);
-        return Result.success(PaymentOrderDTO.from(order));
+        weChatOrderSync.refreshIfPending(order);
+        return Result.success(PaymentOrderDTO.from(paymentService.requireOrderForUser(orderId, userId)));
     }
 
     /**
@@ -133,7 +137,7 @@ public class PaymentController {
         Long userId = auth.requireUserId(authorization);
         // 校验订单归属（避免 A 取消 B 的订单）
         paymentService.requireOrderForUser(orderId, userId);
-        paymentService.closeOrder(orderId, "用户主动取消");
+        weChatOrderSync.closeOrder(orderId, "用户主动取消");
         return Result.success();
     }
 
@@ -188,7 +192,7 @@ public class PaymentController {
      *     微信支付 V3 回调通知文档</a>
      */
     @PostMapping("/notify/wechat")
-    public Map<String, String> wechatNotify(
+    public ResponseEntity<?> wechatNotify(
             @RequestHeader(value = "Wechatpay-Timestamp", required = false) String timestamp,
             @RequestHeader(value = "Wechatpay-Nonce", required = false) String nonce,
             @RequestHeader(value = "Wechatpay-Signature", required = false) String signature,
@@ -199,10 +203,10 @@ public class PaymentController {
                 timestamp, nonce, signature, serial, body);
 
         if (success) {
-            return Map.of("code", "SUCCESS", "message", "OK");
+            return ResponseEntity.noContent().build();
         } else {
             // 返回 FAIL 让微信重试（微信会按策略重试最多 15 次）
-            return Map.of("code", "FAIL", "message", "处理失败，请重试");
+            return ResponseEntity.status(503).body(Map.of("code", "FAIL", "message", "处理失败，请重试"));
         }
     }
 
@@ -213,7 +217,7 @@ public class PaymentController {
      * 配置的地址接收；仅 REFUND.SUCCESS 会触发退款单完成 + 发 PaymentRefundedEvent（撤会员）。
      */
     @PostMapping("/notify/wechat/refund")
-    public Map<String, String> wechatRefundNotify(
+    public ResponseEntity<?> wechatRefundNotify(
             @RequestHeader(value = "Wechatpay-Timestamp", required = false) String timestamp,
             @RequestHeader(value = "Wechatpay-Nonce", required = false) String nonce,
             @RequestHeader(value = "Wechatpay-Signature", required = false) String signature,
@@ -224,9 +228,9 @@ public class PaymentController {
                 timestamp, nonce, signature, serial, body);
 
         if (success) {
-            return Map.of("code", "SUCCESS", "message", "OK");
+            return ResponseEntity.noContent().build();
         } else {
-            return Map.of("code", "FAIL", "message", "处理失败，请重试");
+            return ResponseEntity.status(503).body(Map.of("code", "FAIL", "message", "处理失败，请重试"));
         }
     }
 

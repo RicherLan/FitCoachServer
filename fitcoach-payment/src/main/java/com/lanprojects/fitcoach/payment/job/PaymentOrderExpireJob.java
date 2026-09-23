@@ -3,7 +3,7 @@ package com.lanprojects.fitcoach.payment.job;
 import com.lanprojects.fitcoach.payment.entity.OrderStatus;
 import com.lanprojects.fitcoach.payment.entity.PaymentOrder;
 import com.lanprojects.fitcoach.payment.repository.PaymentOrderRepository;
-import com.lanprojects.fitcoach.payment.service.PaymentService;
+import com.lanprojects.fitcoach.payment.provider.wechat.WeChatOrderSyncService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
@@ -39,7 +39,7 @@ public class PaymentOrderExpireJob {
     private static final int BATCH_LIMIT = 200;
 
     private final PaymentOrderRepository orderRepository;
-    private final PaymentService paymentService;
+    private final WeChatOrderSyncService weChatOrderSync;
 
     @Value("${payment.order-expire.timeout-minutes:30}")
     private int timeoutMinutes;
@@ -62,7 +62,7 @@ public class PaymentOrderExpireJob {
             for (int i = 0; i < processed; i++) {
                 PaymentOrder order = stale.get(i);
                 try {
-                    paymentService.closeOrder(order.getOrderId(),
+                    weChatOrderSync.closeOrder(order.getOrderId(),
                             "超过 " + timeoutMinutes + " 分钟未支付，系统自动关闭");
                     closed++;
                 } catch (Exception e) {

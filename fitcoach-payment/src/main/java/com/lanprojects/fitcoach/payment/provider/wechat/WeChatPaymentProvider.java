@@ -55,6 +55,7 @@ public class WeChatPaymentProvider implements PaymentChannelProvider {
 
     private final SysConfigService sysConfigService;
     private final ObjectMapper objectMapper;
+    private final WeChatSignatureVerifier signatureVerifier;
 
     @Override
     public PaymentChannel channel() {
@@ -72,7 +73,10 @@ public class WeChatPaymentProvider implements PaymentChannelProvider {
                 && notBlank(sysConfigService.getValue(PaymentConfigKeys.WECHAT_API_V3_KEY))
                 && notBlank(sysConfigService.getValue(PaymentConfigKeys.WECHAT_MCH_SERIAL_NO))
                 && notBlank(sysConfigService.getValue(PaymentConfigKeys.WECHAT_NOTIFY_URL))
-                && notBlank(sysConfigService.getValue(PaymentConfigKeys.WECHAT_MCH_PRIVATE_KEY));
+                && notBlank(sysConfigService.getValue(PaymentConfigKeys.WECHAT_MCH_PRIVATE_KEY))
+                && sysConfigService.getValue(PaymentConfigKeys.WECHAT_API_V3_KEY).getBytes(java.nio.charset.StandardCharsets.UTF_8).length == 32
+                && httpsUrl(sysConfigService.getValue(PaymentConfigKeys.WECHAT_NOTIFY_URL))
+                && signatureVerifier.isConfigured();
     }
 
     /**
@@ -117,6 +121,7 @@ public class WeChatPaymentProvider implements PaymentChannelProvider {
         String prepayId;
         try (HttpResponse response = HttpRequest.post(WECHAT_APP_ORDER_URL)
                 .header("Authorization", authorization)
+                .header("Wechatpay-Serial", signatureVerifier.preferredSerial())
                 .header("Content-Type", "application/json")
                 .header("Accept", "application/json")
                 .body(bodyJson)
@@ -126,6 +131,11 @@ public class WeChatPaymentProvider implements PaymentChannelProvider {
 
             int status = response.getStatus();
             String respBody = response.body();
+            if (status >= 200 && status < 300 && !signatureVerifier.verify(
+                    response.header("Wechatpay-Timestamp"), response.header("Wechatpay-Nonce"),
+                    respBody, response.header("Wechatpay-Signature"), response.header("Wechatpay-Serial"))) {
+                throw new IllegalStateException("微信支付API应答验签失败，拒绝使用响应");
+            }
             log.info("[wechat-pay] 统一下单响应 orderId={} status={} bodyLen={}",
                     request.orderId(), status, respBody == null ? 0 : respBody.length());
 
@@ -162,6 +172,52 @@ public class WeChatPaymentProvider implements PaymentChannelProvider {
         return new CreateOrderResult(prepayId, clientPayload, false);
     }
 
+    /** 查单补偿只使用验签后的微信交易数据。 */
+    public Map<String, Object> queryTransaction(String orderId) {
+        String mchId = requireConfig(PaymentConfigKeys.WECHAT_MCH_ID, "微信商户号");
+        String path = "/v3/pay/transactions/out-trade-no/" + java.net.URLEncoder.encode(orderId, java.nio.charset.StandardCharsets.UTF_8)
+                + "?mchid=" + java.net.URLEncoder.encode(mchId, java.nio.charset.StandardCharsets.UTF_8);
+        var key = WeChatPayV3Helper.loadPrivateKeyFromPem(requireConfig(PaymentConfigKeys.WECHAT_MCH_PRIVATE_KEY, "商户私钥"));
+        String authorization = WeChatPayV3Helper.buildAuthorizationHeader("GET", path, "", mchId,
+                requireConfig(PaymentConfigKeys.WECHAT_MCH_SERIAL_NO, "商户证书序列号"), key);
+        try (HttpResponse response = HttpRequest.get("https://api.mch.weixin.qq.com" + path)
+                .header("Authorization", authorization).header("Wechatpay-Serial", signatureVerifier.preferredSerial())
+                .header("Accept", "application/json").timeout(CONNECT_TIMEOUT).setReadTimeout(READ_TIMEOUT).execute()) {
+            String body = response.body();
+            if (response.getStatus() != 200 || !signatureVerifier.verify(response.header("Wechatpay-Timestamp"),
+                    response.header("Wechatpay-Nonce"), body, response.header("Wechatpay-Signature"), response.header("Wechatpay-Serial"))) {
+                throw new IllegalStateException("微信查单失败或应答验签失败");
+            }
+            Map<String, Object> transaction = objectMapper.readValue(body, new TypeReference<>() {});
+            if (!orderId.equals(transaction.get("out_trade_no")) || !mchId.equals(transaction.get("mchid"))
+                    || !requireConfig(PaymentConfigKeys.WECHAT_APP_ID, "微信AppID").equals(transaction.get("appid"))) {
+                throw new IllegalStateException("微信查单的订单/商户/应用不匹配");
+            }
+            return transaction;
+        } catch (Exception e) { throw new BusinessException(ResultCode.PAYMENT_PROVIDER_ERROR, "微信查单未确认，请稍后重试"); }
+    }
+
+    /** 必须微信关单确认成功后才可关闭本地订单，避免本地取消后仍被扣款。 */
+    public void closeRemoteOrder(String orderId) {
+        String mchId = requireConfig(PaymentConfigKeys.WECHAT_MCH_ID, "微信商户号");
+        String path = "/v3/pay/transactions/out-trade-no/" + java.net.URLEncoder.encode(orderId, java.nio.charset.StandardCharsets.UTF_8) + "/close";
+        try {
+            String body = objectMapper.writeValueAsString(Map.of("mchid", mchId));
+            var key = WeChatPayV3Helper.loadPrivateKeyFromPem(requireConfig(PaymentConfigKeys.WECHAT_MCH_PRIVATE_KEY, "商户私钥"));
+            String authorization = WeChatPayV3Helper.buildAuthorizationHeader("POST", path, body, mchId,
+                    requireConfig(PaymentConfigKeys.WECHAT_MCH_SERIAL_NO, "商户证书序列号"), key);
+            try (HttpResponse response = HttpRequest.post("https://api.mch.weixin.qq.com" + path)
+                    .header("Authorization", authorization).header("Wechatpay-Serial", signatureVerifier.preferredSerial())
+                    .header("Content-Type", "application/json").body(body).timeout(CONNECT_TIMEOUT).setReadTimeout(READ_TIMEOUT).execute()) {
+                if (response.getStatus() != 204 || !signatureVerifier.verify(
+                        response.header("Wechatpay-Timestamp"), response.header("Wechatpay-Nonce"),
+                        "", response.header("Wechatpay-Signature"), response.header("Wechatpay-Serial"))) {
+                    throw new IllegalStateException("微信关单未确认或应答验签失败");
+                }
+            }
+        } catch (Exception e) { throw new BusinessException(ResultCode.PAYMENT_PROVIDER_ERROR, "微信关单未确认，保留订单等待核实"); }
+    }
+
     // ====== 退款（波 2）======
 
     @Override
@@ -183,7 +239,8 @@ public class WeChatPaymentProvider implements PaymentChannelProvider {
         String mchId = requireConfig(PaymentConfigKeys.WECHAT_MCH_ID, "微信商户号");
         String serialNo = requireConfig(PaymentConfigKeys.WECHAT_MCH_SERIAL_NO, "商户证书序列号");
         String privateKeyPem = requireConfig(PaymentConfigKeys.WECHAT_MCH_PRIVATE_KEY, "商户私钥");
-        String refundNotifyUrl = sysConfigService.getValue(PaymentConfigKeys.WECHAT_REFUND_NOTIFY_URL);
+        String refundNotifyUrl = requireConfig(PaymentConfigKeys.WECHAT_REFUND_NOTIFY_URL, "微信退款回调URL");
+        if (!httpsUrl(refundNotifyUrl)) throw new BusinessException(ResultCode.REFUND_PROVIDER_ERROR, "微信退款回调必须为HTTPS地址");
 
         PrivateKey privateKey;
         try {
@@ -201,6 +258,7 @@ public class WeChatPaymentProvider implements PaymentChannelProvider {
 
         try (HttpResponse response = HttpRequest.post(WECHAT_REFUND_URL)
                 .header("Authorization", authorization)
+                .header("Wechatpay-Serial", signatureVerifier.preferredSerial())
                 .header("Content-Type", "application/json")
                 .header("Accept", "application/json")
                 .body(bodyJson)
@@ -210,6 +268,11 @@ public class WeChatPaymentProvider implements PaymentChannelProvider {
 
             int status = response.getStatus();
             String respBody = response.body();
+            if (status >= 200 && status < 300 && !signatureVerifier.verify(
+                    response.header("Wechatpay-Timestamp"), response.header("Wechatpay-Nonce"),
+                    respBody, response.header("Wechatpay-Signature"), response.header("Wechatpay-Serial"))) {
+                throw new IllegalStateException("微信支付API应答验签失败，拒绝使用响应");
+            }
             if (status < 200 || status >= 300) {
                 log.error("[wechat-refund] 退款失败 refundNo={} status={} body={}",
                         request.refundNo(), status, respBody);
@@ -339,4 +402,10 @@ public class WeChatPaymentProvider implements PaymentChannelProvider {
         if (s == null) return "";
         return s.length() <= maxLen ? s : s.substring(0, maxLen);
     }
+    private static boolean httpsUrl(String value) {
+        try { var uri = java.net.URI.create(value); return "https".equalsIgnoreCase(uri.getScheme())
+                && uri.getHost() != null && uri.getRawQuery() == null && uri.getRawFragment() == null; }
+        catch (Exception e) { return false; }
+    }
+
 }

@@ -12,8 +12,10 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
 
-import java.security.PublicKey;
 import java.util.Map;
+import java.util.Objects;
+import com.lanprojects.fitcoach.payment.entity.PaymentChannel;
+import com.lanprojects.fitcoach.payment.entity.OrderStatus;
 
 /**
  * 微信支付 V3 回调处理器 — 校验签名 → 解密 → 提取关键字段 → 调 PaymentService.markPaid。
@@ -61,6 +63,7 @@ public class WeChatCallbackHandler {
     private final PaymentService paymentService;
     private final RefundService refundService;
     private final ObjectMapper objectMapper;
+    private final WeChatSignatureVerifier signatureVerifier;
 
     /**
      * 处理微信支付回调。
@@ -77,8 +80,8 @@ public class WeChatCallbackHandler {
                                    String body) {
         log.info("[wechat-pay] 收到微信回调 bodyLen={}", body == null ? 0 : body.length());
 
-        // 1. 签名校验：默认强制启用，开发模式可通过 sysConfig 跳过（生产严禁开启）
-        if (!verifyCallbackSignatureOrSkip(wechatpayTimestamp, wechatpayNonce,
+        // 1. 强制验证微信签名，真实通道不允许跳过。
+        if (!verifyCallbackSignature(wechatpayTimestamp, wechatpayNonce,
                 wechatpaySignature, wechatpaySerial, body)) {
             return false;
         }
@@ -98,7 +101,7 @@ public class WeChatCallbackHandler {
             // 3. 解密 resource
             @SuppressWarnings("unchecked")
             Map<String, Object> resource = (Map<String, Object>) outerMap.get("resource");
-            if (resource == null) {
+            if (resource == null || !"AEAD_AES_256_GCM".equals(resource.get("algorithm"))) {
                 log.error("[wechat-pay] 回调 body 缺少 resource 字段");
                 return false;
             }
@@ -122,48 +125,63 @@ public class WeChatCallbackHandler {
 
             // 4. 解析解密后的交易数据
             Map<String, Object> transaction = objectMapper.readValue(decryptedJson, new TypeReference<>() {});
-            String outTradeNo = (String) transaction.get("out_trade_no");
-            String transactionId = (String) transaction.get("transaction_id");
-            String tradeState = (String) transaction.get("trade_state");
-            Long paidAmountCents = extractPaidAmountCents(transaction);
-
-            log.info("[wechat-pay] 回调交易信息 out_trade_no={} transaction_id={} trade_state={} amountCents={}",
-                    outTradeNo, transactionId, tradeState, paidAmountCents);
-
-            if (!"SUCCESS".equals(tradeState)) {
-                log.warn("[wechat-pay] 交易状态非 SUCCESS，忽略 tradeState={} orderId={}",
-                        tradeState, outTradeNo);
-                return true; // 微信仍收到 SUCCESS ack
-            }
-
-            if (outTradeNo == null || outTradeNo.isBlank()) {
-                log.error("[wechat-pay] 解密后 out_trade_no 为空");
-                return false;
-            }
-
-            if (paidAmountCents == null) {
-                // amount.total 缺失通常意味着回调体结构异常 — 拒绝处理让微信重试，并触发告警
-                log.error("[wechat-pay] 回调缺少 amount.total，拒绝处理 orderId={}", outTradeNo);
-                return false;
-            }
-
-            // 5. 标记订单已支付（带金额校验 — markPaid 内部对 PENDING 状态做幂等处理，
-            //    金额不匹配会抛 PAYMENT_ORDER_AMOUNT_MISMATCH 让本回调返回 SUCCESS ack
-            //    但订单留在 PENDING 等待人工核查，避免微信无限重试相同的金额异常请求）
-            paymentService.markPaid(outTradeNo, null, transactionId, paidAmountCents);
-            log.info("[wechat-pay] 订单标记支付成功 orderId={} transactionId={} amountCents={}",
-                    outTradeNo, transactionId, paidAmountCents);
-            return true;
+            return applyVerifiedTransaction(transaction);
 
         } catch (BusinessException be) {
             log.error("[wechat-pay] 回调处理业务异常 msg={}", be.getMessage());
-            // 业务异常（如订单不存在）也返回 SUCCESS，防止微信无限重试
-            return true;
+            // 未完成业务落账不得确认已接收，允许微信重试。
+            return false;
         } catch (Exception e) {
             log.error("[wechat-pay] 回调处理异常", e);
             return false; // 返回 FAIL，微信会重试
         }
     }
+
+    /** 仅供已完成签名校验的通知/查单结果复用；不接收客户端声明的支付结果。 */
+    public boolean applyVerifiedTransaction(Map<String, Object> transaction) {
+        if (!Objects.equals(sysConfigService.getValue(PaymentConfigKeys.WECHAT_APP_ID), transaction.get("appid"))
+                || !Objects.equals(sysConfigService.getValue(PaymentConfigKeys.WECHAT_MCH_ID), transaction.get("mchid"))) return false;
+        if (!(transaction.get("amount") instanceof Map<?, ?> amount) || !"CNY".equals(amount.get("currency"))) return false;
+        String outTradeNo = (String) transaction.get("out_trade_no");
+        String transactionId = (String) transaction.get("transaction_id");
+        String tradeState = (String) transaction.get("trade_state");
+        Long paidAmountCents = extractPaidAmountCents(transaction);
+
+        log.info("[wechat-pay] 回调交易信息 out_trade_no={} transaction_id={} trade_state={} amountCents={}",
+                outTradeNo, transactionId, tradeState, paidAmountCents);
+
+        if (!"SUCCESS".equals(tradeState)) {
+            log.warn("[wechat-pay] 交易状态非 SUCCESS，忽略 tradeState={} orderId={}",
+                    tradeState, outTradeNo);
+            return true; // 微信仍收到 SUCCESS ack
+        }
+
+        if (outTradeNo == null || outTradeNo.isBlank() || transactionId == null || transactionId.isBlank()) {
+            log.error("[wechat-pay] 解密后 out_trade_no 为空");
+            return false;
+        }
+
+        if (paidAmountCents == null) {
+            // amount.total 缺失通常意味着回调体结构异常 — 拒绝处理让微信重试，并触发告警
+            log.error("[wechat-pay] 回调缺少 amount.total，拒绝处理 orderId={}", outTradeNo);
+            return false;
+        }
+
+        // 5. 只有验签、商户/应用/币种、金额与业务落账全部成功才确认通知。
+        var order = paymentService.findByOrderId(outTradeNo).orElseThrow();
+        if (order.getChannel() != PaymentChannel.WECHAT
+                || !Objects.equals(order.getAmountCents().longValue(), paidAmountCents)
+                || (order.getChannelTransactionId() != null && !transactionId.equals(order.getChannelTransactionId()))) return false;
+        // 已全额退款的已知交易仍需幂等确认延迟到达的支付通知，不重新授予会员。
+        if (order.getStatus() == OrderStatus.REFUNDED
+                && transactionId.equals(order.getChannelTransactionId())) return true;
+        paymentService.markPaid(outTradeNo, null, transactionId, paidAmountCents);
+        log.info("[wechat-pay] 订单标记支付成功 orderId={} transactionId={} amountCents={}",
+                outTradeNo, transactionId, paidAmountCents);
+        return true;
+
+    }
+
 
     /**
      * 处理微信退款结果回调（{@code /v3/refund/domestic/refunds} 的异步通知，波 2）。
@@ -179,7 +197,7 @@ public class WeChatCallbackHandler {
                                         String wechatpaySignature, String wechatpaySerial,
                                         String body) {
         log.info("[wechat-refund] 收到退款回调 bodyLen={}", body == null ? 0 : body.length());
-        if (!verifyCallbackSignatureOrSkip(wechatpayTimestamp, wechatpayNonce,
+        if (!verifyCallbackSignature(wechatpayTimestamp, wechatpayNonce,
                 wechatpaySignature, wechatpaySerial, body)) {
             return false;
         }
@@ -190,7 +208,7 @@ public class WeChatCallbackHandler {
 
             @SuppressWarnings("unchecked")
             Map<String, Object> resource = (Map<String, Object>) outerMap.get("resource");
-            if (resource == null) {
+            if (resource == null || !"AEAD_AES_256_GCM".equals(resource.get("algorithm"))) {
                 log.error("[wechat-refund] 回调缺少 resource 字段");
                 return false;
             }
@@ -209,6 +227,7 @@ public class WeChatCallbackHandler {
             }
 
             Map<String, Object> refund = objectMapper.readValue(decryptedJson, new TypeReference<>() {});
+            if (!Objects.equals(sysConfigService.getValue(PaymentConfigKeys.WECHAT_MCH_ID), refund.get("mchid"))) return false;
             String refundId = (String) refund.get("refund_id");
             String outRefundNo = (String) refund.get("out_refund_no");
             String refundStatus = (String) refund.get("refund_status");
@@ -260,43 +279,11 @@ public class WeChatCallbackHandler {
     }
 
     /**
-     * 包装签名校验流程：优先读取平台证书做真验签，开发模式可通过 sysConfig 跳过。
-     * 跳过时打 ERROR 日志（不是 WARN），方便监控告警捕获生产环境的危险配置。
+     * 公钥模式优先，兼容平台证书；缺少材料或未知 serial 均拒绝。
      */
-    private boolean verifyCallbackSignatureOrSkip(String timestamp, String nonce,
+    private boolean verifyCallbackSignature(String timestamp, String nonce,
                                                     String signature, String serial, String body) {
-        boolean skip = sysConfigService.getBoolValue(
-                PaymentConfigKeys.WECHAT_SKIP_CALLBACK_SIGNATURE, false);
-        if (skip) {
-            log.error("[wechat-pay] ⚠️ 回调签名校验已被跳过（{}=true），生产环境严禁开启！" +
-                            " timestamp={} nonce={} serial={}",
-                    PaymentConfigKeys.WECHAT_SKIP_CALLBACK_SIGNATURE,
-                    timestamp, nonce, serial);
-            return true;
-        }
-
-        String platformCertPem = sysConfigService.getValue(PaymentConfigKeys.WECHAT_PLATFORM_CERT_PEM);
-        if (platformCertPem == null || platformCertPem.isBlank()) {
-            log.error("[wechat-pay] 缺少微信平台证书配置 ({})，拒绝处理回调",
-                    PaymentConfigKeys.WECHAT_PLATFORM_CERT_PEM);
-            return false;
-        }
-
-        PublicKey platformPublicKey;
-        try {
-            platformPublicKey = WeChatPayV3Helper.loadPublicKeyFromCertPem(platformCertPem);
-        } catch (Exception e) {
-            log.error("[wechat-pay] 平台证书解析失败，请检查 PEM 格式", e);
-            return false;
-        }
-
-        if (!WeChatPayV3Helper.verifyCallbackSignature(
-                timestamp, nonce, body, signature, platformPublicKey)) {
-            log.error("[wechat-pay] 回调签名校验失败 timestamp={} nonce={} serial={}",
-                    timestamp, nonce, serial);
-            return false;
-        }
-        log.info("[wechat-pay] 回调签名校验通过 serial={}", serial);
-        return true;
+        // 真实支付不允许开发开关绕过验签，Mock联调使用独立MOCK通道。
+        return signatureVerifier.verify(timestamp, nonce, body, signature, serial);
     }
 }

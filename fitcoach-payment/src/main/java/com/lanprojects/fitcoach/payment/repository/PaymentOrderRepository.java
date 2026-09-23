@@ -14,6 +14,7 @@ import java.util.List;
 import java.util.Optional;
 
 public interface PaymentOrderRepository extends JpaRepository<PaymentOrder, Long> {
+    List<PaymentOrder> findTop20ByChannelAndStatusOrderByCreatedAtAsc(com.lanprojects.fitcoach.payment.entity.PaymentChannel channel, OrderStatus status);
 
     Optional<PaymentOrder> findByOrderId(String orderId);
 

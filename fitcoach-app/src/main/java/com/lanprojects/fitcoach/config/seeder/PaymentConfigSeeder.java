@@ -80,7 +80,16 @@ public class PaymentConfigSeeder implements CommandLineRunner {
                 "微信支付平台证书 PEM（回调验签用，加密存储；商户证书调 /v3/certificates 接口下载）", true));
         inserted += ensureExists(new SysConfig(
                 PaymentConfigKeys.WECHAT_SKIP_CALLBACK_SIGNATURE, "false", "payment",
-                "开发模式跳过回调验签（生产环境严禁开启）"));
+                "已停用：真实微信通道始终验签，此值保持false"));
+
+        inserted += ensureExists(new SysConfig(
+                PaymentConfigKeys.WECHAT_PUBLIC_KEY_ID, "", "payment", "微信支付公钥ID（PUB_KEY_ID_开头，新商户推荐）"));
+        inserted += ensureExists(new SysConfig(
+                PaymentConfigKeys.WECHAT_PUBLIC_KEY_PEM, configCryptoService.encrypt(""), "payment",
+                "微信支付公钥PEM（BEGIN PUBLIC KEY，用于响应和回调验签）", true));
+
+        inserted += ensureExists(new SysConfig(
+                PaymentConfigKeys.WECHAT_REFUND_NOTIFY_URL, "", "payment", "微信退款回调URL（外网可达HTTPS，测试退款前必填）"));
 
         // Apple IAP — 默认全部空，等申请到苹果开发者账号
         inserted += ensureExists(new SysConfig(
