@@ -192,11 +192,10 @@ bash shell/deploy.sh --logs
 ### 4.1 部署新版本
 
 ```bash
-cd /opt/fitcoach/FitCoachServer
-bash shell/deploy.sh
+cd /opt/fitcoach/FitCoachServer && bash shell/update.sh
 ```
 
-代码已 push 到 GitHub 后，服务器上一行命令完成更新。
+统一脚本自动拉代码、备份、执行未应用的登记迁移、部署与验证。首次获取脚本及迁移说明见[更新后部署](更新后部署.md)。日常更新不要绕过它直接调用旧deploy.sh。
 
 ### 4.2 查看日志
 

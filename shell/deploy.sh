@@ -1,6 +1,7 @@
 #!/bin/bash
 # ============================================================
 # FitCoach Server — 生产部署脚本
+# 已有数据库日常更新请使用 bash shell/update.sh（含SQL迁移）；本脚本不执行迁移。
 #
 # 在服务器上执行（不是本地！）：
 #   cd /opt/fitcoach/FitCoachServer
