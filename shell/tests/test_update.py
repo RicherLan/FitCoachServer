@@ -9,7 +9,7 @@ import tempfile
 import unittest
 
 ROOT = Path(__file__).resolve().parents[2]
-NAMES = ["20260922_membership_entitlement.sql", "20260922_ai_training_summary.sql"]
+NAMES = ["20260922_membership_entitlement.sql", "20260922_ai_training_summary.sql", "20260923_entitlement_order_collation.sql"]
 FAKE = r'''#!/usr/bin/env python3
 import hashlib,json,os,re,sys
 from pathlib import Path
@@ -28,12 +28,15 @@ if cmd=='sleep': sys.exit(0)
 if cmd=='sha256sum': print(hashlib.sha256(Path(args[0]).read_bytes()).hexdigest()+'  '+args[0]);sys.exit(0)
 if cmd=='curl':
  if s.get('health_fail'): fail()
+ if args[-1].startswith('http://'):
+  print('<html>301 Moved Permanently</html>');sys.exit(0)
+ if '--resolve' not in args or '-k' in args or '--insecure' in args: fail()
  print('{"code":0,"data":"pong"}');sys.exit(0)
 if cmd!='docker': fail()
 if args[0]=='inspect': print('sha256:old');sys.exit(0)
 if args[0]=='compose':
  if 'build' in args and s.get('build_fail'): fail()
- if 'port' in args: print('0.0.0.0:80')
+ if 'port' in args: print('0.0.0.0:8443')
  sys.exit(0)
 if args[0] in ['info','tag']: sys.exit(0)
 if args[0]=='exec':
@@ -47,6 +50,12 @@ if args[0]=='exec':
   name=re.search("version='([^']+)'",sql)[1]
   if name in s['history']: print(':'.join(s['history'][name]))
  elif sql.startswith('SELECT version'): print('\n'.join(sorted(s['history'])))
+ elif 'SET @fc_alter' in sql:
+  name='20260923_entitlement_order_collation.sql'
+  s['executed'].append(name)
+  if s.get('sql_fail')==name: fail()
+  s['states'][name]='APPLIED'
+ elif '@fc_order_collation' in sql: print(s['states']['20260923_entitlement_order_collation.sql'])
  elif '@fc_' in sql:
   name='20260922_membership_entitlement.sql' if "TABLE_NAME='membership_entitlement'" in sql else '20260922_ai_training_summary.sql'
   print(s['states'][name])
@@ -97,7 +106,7 @@ class UpdateTest(unittest.TestCase):
         self.state['states']={n:'APPLIED' for n in NAMES}
         result=self.run_update();self.assertEqual(result.returncode,0,result.stderr)
         self.assertEqual(self.state['executed'],[])
-        self.assertEqual(len(self.state['history']),2)
+        self.assertEqual(len(self.state['history']),len(NAMES))
     def test_pull_failure_stops_before_docker(self):
         self.state['pull_fail']=True
         self.assertNotEqual(self.run_update().returncode,0)
@@ -140,6 +149,22 @@ class UpdateTest(unittest.TestCase):
         self.assertNotEqual(self.run_update().returncode,0)
         self.assertFalse(any('build app' in t for t in self.state['trace']))
 
+    def test_health_uses_https_sni_and_reloads_nginx(self):
+        result=self.run_update();self.assertEqual(result.returncode,0,result.stderr)
+        trace=self.state['trace']
+        curl=next(t for t in trace if t.startswith('curl '))
+        self.assertIn('--resolve migofitai.com:8443:127.0.0.1',curl)
+        self.assertIn('https://migofitai.com:8443/api/auth/ping',curl)
+        reload=next(i for i,t in enumerate(trace) if 'nginx -s reload' in t)
+        self.assertLess(reload,trace.index(curl))
+    def test_resume_after_health_failure_only_applies_new_migration(self):
+        self.state['ledger']=True
+        for n in NAMES[:2]:
+            p=self.root/'fitcoach-app/src/main/resources/sql'/n
+            self.state['history'][n]=[hashlib.sha256(p.read_bytes()).hexdigest(),'APPLIED']
+            self.state['states'][n]='APPLIED'
+        result=self.run_update();self.assertEqual(result.returncode,0,result.stderr)
+        self.assertEqual(self.state['executed'],[NAMES[2]])
     def test_health_failure_stops_app(self):
         self.state['health_fail']=True
         self.assertNotEqual(self.run_update().returncode,0)

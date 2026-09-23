@@ -1,3 +1,4 @@
 # 按执行顺序登记结构/数据迁移；已发布的SQL保持不变，后续修改新增文件。
 20260922_membership_entitlement.sql
 20260922_ai_training_summary.sql
+20260923_entitlement_order_collation.sql

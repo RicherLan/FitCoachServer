@@ -135,18 +135,27 @@ done
 
 echo '[6/7] 启动服务（强制validate，不再拉取代码）'
 JPA_DDL_AUTO=validate compose up -d app nginx
+# app重建后地址可能变化，现有nginx容器需要重新解析上游地址。
+compose exec -T nginx nginx -t
+compose exec -T nginx nginx -s reload
 echo '[7/7] 验证应用健康'
-port_address=$(compose port nginx 80)
+port_address=$(compose port nginx 443)
 port="${port_address##*:}"
-[[ "${port}" =~ ^[0-9]+$ ]] || { echo '无法获取Nginx HTTP端口' >&2; false; }
+[[ "${port}" =~ ^[0-9]+$ ]] || { echo '无法获取Nginx HTTPS端口' >&2; false; }
+health_host="${FITCOACH_HEALTH_HOST:-migofitai.com}"
+[[ "${health_host}" =~ ^[a-zA-Z0-9.-]+$ ]] || { echo '健康检查域名不合法' >&2; false; }
 healthy=0
 for ((attempt=0; attempt<60; attempt++)); do
-    body=$(curl -fsS --max-time 3 "http://127.0.0.1:${port}/api/auth/ping" 2>/dev/null) || body=''
-    if [[ "${body}" =~ \"code\"[[:space:]]*:[[:space:]]*0[[:space:]]*[,}] && "${body}" =~ \"data\"[[:space:]]*:[[:space:]]*\"pong\" ]]; then
+    # 本机连接但保留真实Host/SNI和证书校验，不受HTTP跳转或公网DNS影响。
+    response_ok=0
+    body=$(curl -fsS --noproxy '*' --max-time 3 \
+        --resolve "${health_host}:${port}:127.0.0.1" \
+        "https://${health_host}:${port}/api/auth/ping" 2>&1) && response_ok=1
+    if [[ "${response_ok}" == 1 && "${body}" =~ \"code\"[[:space:]]*:[[:space:]]*0[[:space:]]*[,}] && "${body}" =~ \"data\"[[:space:]]*:[[:space:]]*\"pong\" ]]; then
         healthy=1; break
     fi
     sleep 2
 done
-[[ "${healthy}" == 1 ]] || { compose logs --tail=80 app; false; }
+[[ "${healthy}" == 1 ]] || { echo "HTTPS健康检查失败，最后响应：${body:0:300}" >&2; compose logs --tail=80 app; false; }
 stopped=0
 echo "更新成功：$(git rev-parse --short HEAD)；备份：${backup_file}"
