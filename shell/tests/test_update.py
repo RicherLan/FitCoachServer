@@ -9,7 +9,7 @@ import tempfile
 import unittest
 
 ROOT = Path(__file__).resolve().parents[2]
-NAMES = ["20260922_membership_entitlement.sql", "20260922_ai_training_summary.sql", "20260923_entitlement_order_collation.sql"]
+NAMES = ["20260922_membership_entitlement.sql", "20260922_ai_training_summary.sql", "20260923_entitlement_order_collation.sql", "20261014_challenge.sql"]
 FAKE = r'''#!/usr/bin/env python3
 import hashlib,json,os,re,sys
 from pathlib import Path
@@ -56,6 +56,7 @@ if args[0]=='exec':
   if s.get('sql_fail')==name: fail()
   s['states'][name]='APPLIED'
  elif '@fc_order_collation' in sql: print(s['states']['20260923_entitlement_order_collation.sql'])
+ elif "SET @fc_tables" in sql: print(s['states']['20261014_challenge.sql'])
  elif '@fc_' in sql:
   name='20260922_membership_entitlement.sql' if "TABLE_NAME='membership_entitlement'" in sql else '20260922_ai_training_summary.sql'
   print(s['states'][name])
@@ -64,6 +65,11 @@ if args[0]=='exec':
   name,h=re.search(r"VALUES\('([^']+)', '([^']+)'",sql).groups();s['history'][name]=[h,'STARTED']
  elif sql.startswith('UPDATE fitcoach_schema_migration'):
   name=re.search("version='([^']+)'",sql)[1];s['history'][name][1]='APPLIED'
+ elif 'CREATE TABLE IF NOT EXISTS challenge_session' in sql:
+  name='20261014_challenge.sql'
+  s['executed'].append(name)
+  if s.get('sql_fail')==name: fail()
+  s['states'][name]='APPLIED'
  else:
   name='20260922_membership_entitlement.sql' if 'CREATE TABLE IF NOT EXISTS membership_entitlement' in sql else '20260922_ai_training_summary.sql'
   s['executed'].append(name)
@@ -164,7 +170,7 @@ class UpdateTest(unittest.TestCase):
             self.state['history'][n]=[hashlib.sha256(p.read_bytes()).hexdigest(),'APPLIED']
             self.state['states'][n]='APPLIED'
         result=self.run_update();self.assertEqual(result.returncode,0,result.stderr)
-        self.assertEqual(self.state['executed'],[NAMES[2]])
+        self.assertEqual(self.state['executed'],NAMES[2:])
     def test_health_failure_stops_app(self):
         self.state['health_fail']=True
         self.assertNotEqual(self.run_update().returncode,0)
