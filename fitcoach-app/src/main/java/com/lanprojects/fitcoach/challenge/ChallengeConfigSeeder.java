@@ -16,7 +16,8 @@ public class ChallengeConfigSeeder implements CommandLineRunner {
     }
     private void ensure(String key, String description) {
         if (configs.findByConfigKey(key).isEmpty()) {
-            configs.save(new SysConfig(key, "false", "challenge", description));
+            // 默认开放挑战；仅补齐缺失项，保留管理员已保存的关闭设置。
+            configs.save(new SysConfig(key, "true", "challenge", description));
         }
     }
 }
